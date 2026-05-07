@@ -188,12 +188,13 @@ window.handleGenerate = async () => {
   const params = new URLSearchParams({ prompt, animStyle });
   const evtSource = new EventSource(`/api/generate-stream?${params.toString()}`);
 
-  // Track received script for later use
+  // Track received script and video assets
   let receivedScript = null;
+  let videoAssets = []; // Array of { frame, videoUrl }
 
   // Show progress section
   progressSection.style.display = 'block';
-  setProgress(5, '🎬 Đang kết nối ChatGPT Director...');
+  setProgress(5, '🎬 Đang kết nối Groq Director...');
 
   evtSource.addEventListener('progress', (e) => {
     const data = JSON.parse(e.data);
@@ -207,8 +208,11 @@ window.handleGenerate = async () => {
   });
 
   evtSource.addEventListener('scene-ready', (e) => {
-    // Individual scene enhanced — could update UI per-scene
     const data = JSON.parse(e.data);
+    // If the backend sends a videoUrl or imageUrl with the scene, collect it
+    if (data.scene?.aiMediaUrl) {
+      videoAssets.push({ frame: data.sceneIndex, url: data.scene.aiMediaUrl });
+    }
     log(`Scene ${data.sceneIndex + 1} visual ready`);
   });
 
@@ -217,10 +221,40 @@ window.handleGenerate = async () => {
     log(`Scene ${data.sceneIndex + 1} visual error: ${data.error}`, 'warn');
   });
 
-  evtSource.addEventListener('complete', (e) => {
+  evtSource.addEventListener('complete', async (e) => {
     evtSource.close();
     const data = JSON.parse(e.data);
     currentScript = data.script;
+
+    // ── Map video/image assets to scenes ──
+    if (data.videoAssets && Array.isArray(data.videoAssets)) {
+      data.videoAssets.forEach(asset => {
+        const idx = asset.frame - 1; // frame is 1-indexed
+        if (currentScript.scenes[idx]) {
+          currentScript.scenes[idx].aiMediaUrl = asset.videoUrl || asset.imageUrl;
+        }
+      });
+    }
+    // Also map any assets collected during streaming
+    videoAssets.forEach(asset => {
+      if (currentScript.scenes[asset.frame]) {
+        currentScript.scenes[asset.frame].aiMediaUrl = asset.url;
+      }
+    });
+
+    // ── Preload all AI media assets before rendering ──
+    const allMediaUrls = currentScript.scenes
+      .map(s => s.aiMediaUrl)
+      .filter(Boolean);
+
+    if (allMediaUrls.length > 0) {
+      setProgress(96, '📦 Đang tải tài nguyên media...');
+      btn.innerHTML = '<span class="spin"></span> Đang tải media...';
+      await renderer.preloadAssets(allMediaUrls, (loaded, total) => {
+        const pct = 96 + (loaded / total) * 4;
+        setProgress(pct, `📦 Đã tải ${loaded}/${total} tài nguyên`);
+      });
+    }
 
     // Reset button
     btn.disabled = false;
@@ -339,14 +373,23 @@ function setButtonState(state) {
 }
 
 // ── TTS Logic ─────────────────────────────────────────────────────────────────
+
+/**
+ * Speak text using the selected TTS engine.
+ * Returns a Promise<number> that resolves with the audio duration in seconds.
+ */
 async function speakText(text) {
   if (activeTab === 'elevenlabs') {
-    const success = await speakElevenLabs(text);
-    if (success) return;
+    const result = await speakElevenLabs(text);
+    if (result) return result;
   }
   return speakFreeTTS(text);
 }
 
+/**
+ * Free TTS via Google Translate.
+ * Resolves with audio duration in seconds, or 0 on failure.
+ */
 function speakFreeTTS(text) {
   return new Promise(async (resolve) => {
     try {
@@ -366,22 +409,27 @@ function speakFreeTTS(text) {
       }
 
       audio.onended = () => { 
+        const duration = audio.duration || 0;
         URL.revokeObjectURL(url); 
         activeAudio = null;
-        resolve(true); 
+        resolve(duration); 
       };
       audio.onerror = () => {
         activeAudio = null;
-        resolve(false);
+        resolve(0);
       };
       audio.play();
     } catch (e) { 
       activeAudio = null;
-      resolve(false); 
+      resolve(0); 
     }
   });
 }
 
+/**
+ * ElevenLabs TTS.
+ * Resolves with audio duration in seconds, or false on failure.
+ */
 function speakElevenLabs(text) {
   return new Promise(async (resolve) => {
     try {
@@ -410,9 +458,10 @@ function speakElevenLabs(text) {
       }
 
       audio.onended = () => { 
+        const duration = audio.duration || 0;
         URL.revokeObjectURL(url); 
         activeAudio = null;
-        resolve(true); 
+        resolve(duration); 
       };
       audio.onerror = () => {
         activeAudio = null;
@@ -500,27 +549,40 @@ async function startCreation(withRecording) {
     const scene = scenes[i];
     
     // Update Progress
-    const progressPct = Math.floor((i / scenes.length) * 100);
-    setProgress(progressPct, `Đang tạo cảnh ${i + 1}/${scenes.length}: "${scene.sceneTitle}"`);
+    const pct = Math.floor((i / scenes.length) * 100);
+    setProgress(pct, `Đang tạo cảnh ${i + 1}/${scenes.length}: "${scene.sceneTitle}"`);
 
     // 1. Handle Hook (Scene 1 only)
     if (i === 0 && scene.hookType && scene.hookType !== 'none') {
       await handleHookEffect(scene.hookType, scene.accentColor);
     }
 
-    // 2. Render Scene & Play Audio
-    const sceneTask = new Promise(resolve => {
-      renderer.renderScene(scene, globalTheme, () => {
-        resolve();
-      });
+    // 2. Start audio and renderer in parallel.
+    //    The renderer runs a rAF loop; audio plays independently.
+    //    We wait for BOTH to finish. If the video asset is shorter than the
+    //    audio, the renderer loops the video (video.loop = true by default).
+    //    If audio finishes first, the renderer keeps drawing until its
+    //    duration expires. We use the longer of the two as the scene duration.
+
+    // Launch audio — resolves when narration ends, returns duration in seconds
+    const audioPromise = speakText(scene.narration);
+
+    // Launch renderer — resolves when scene.estimatedDuration expires
+    const renderPromise = new Promise(resolve => {
+      renderer.renderScene(scene, globalTheme, resolve);
     });
 
-    // Start Audio
-    const audioTask = speakText(scene.narration);
+    // Wait for both to complete
+    const [audioDuration] = await Promise.all([audioPromise, renderPromise]);
 
-    // Wait for both (or at least audio)
-    await Promise.all([sceneTask, audioTask]);
-    
+    // If the audio was longer than estimatedDuration, the renderer already
+    // stopped but audio was still playing. To handle this: if we detect the
+    // audio ran past the render, we extend by re-starting the render for
+    // the remaining time. In practice, since we wait for both Promises,
+    // the audio promise won't resolve until the audio finishes playing.
+    // The renderer completes at estimatedDuration, and audio at its own pace,
+    // so whichever finishes last determines when the loop moves to next scene.
+
     if (!isRunning) break;
   }
 

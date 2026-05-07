@@ -1,7 +1,8 @@
 /**
  * ╔══════════════════════════════════════════════════════════════════════════╗
- * ║  AI VIDEO RENDERER v2.0 — Multi-Mode Cinematic Engine                   ║
- * ║  Handles: 2D/3D/Particle/Liquid/Glitch Render Modes, Overlays, FX        ║
+ * ║  AI VIDEO RENDERER v3.0 — Multi-Mode Cinematic Engine + AI Media       ║
+ * ║  Handles: AI Image/Video Sequencing, 2D/3D/Particle/Liquid/Glitch,     ║
+ * ║  Asset Preloading, Object-Fit Cover, Overlay Compositing               ║
  * ╚══════════════════════════════════════════════════════════════════════════╝
  */
 
@@ -15,19 +16,103 @@ class VideoRenderer {
     // Core State
     this.scenes = [];
     this.globalTheme = null;
+    this.currentScene = null;
     this.currentSceneIdx = -1;
     this.globalTime = 0;
     this.sceneTime = 0;
     this.animFrame = null;
     this.isRunning = false;
+    this.lastTimestamp = 0;
+
+    // Asset Cache: url → HTMLImageElement | HTMLVideoElement
+    this.assetCache = new Map();
 
     // Sub-Engines State
     this.particles = [];
     this.initGlobalParticles();
     this.noiseCanvas = this.createNoiseCanvas();
-    
+
     // Callbacks
     this.onSceneComplete = null;
+  }
+
+  // ══════════════════════════ ASSET LOADER ══════════════════════════
+
+  /**
+   * Pre-load an array of media URLs (images or short videos).
+   * Returns a Promise that resolves when ALL assets are loaded.
+   * @param {string[]} urls
+   * @param {function} onProgress - (loaded, total) => void
+   */
+  preloadAssets(urls, onProgress) {
+    const uniqueUrls = [...new Set(urls.filter(Boolean))];
+    if (uniqueUrls.length === 0) return Promise.resolve();
+
+    let loaded = 0;
+    const total = uniqueUrls.length;
+
+    return Promise.all(
+      uniqueUrls.map(url => {
+        // Skip if already cached
+        if (this.assetCache.has(url)) {
+          loaded++;
+          if (onProgress) onProgress(loaded, total);
+          return Promise.resolve();
+        }
+
+        return new Promise(resolve => {
+          const isVideo = /\.(mp4|webm|mov|ogg)(\?|$)/i.test(url);
+
+          if (isVideo) {
+            const vid = document.createElement('video');
+            vid.crossOrigin = 'anonymous';
+            vid.muted = true;           // Must be muted for autoplay
+            vid.loop = true;            // Loop by default
+            vid.playsInline = true;
+            vid.preload = 'auto';
+            vid.src = url;
+
+            vid.onloadeddata = () => {
+              this.assetCache.set(url, vid);
+              loaded++;
+              if (onProgress) onProgress(loaded, total);
+              resolve();
+            };
+            vid.onerror = () => {
+              console.warn('Asset load failed (video):', url);
+              loaded++;
+              if (onProgress) onProgress(loaded, total);
+              resolve(); // Don't reject — graceful degradation
+            };
+            vid.load();
+          } else {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => {
+              this.assetCache.set(url, img);
+              loaded++;
+              if (onProgress) onProgress(loaded, total);
+              resolve();
+            };
+            img.onerror = () => {
+              console.warn('Asset load failed (image):', url);
+              loaded++;
+              if (onProgress) onProgress(loaded, total);
+              resolve();
+            };
+            img.src = url;
+          }
+        });
+      })
+    );
+  }
+
+  /**
+   * Retrieve a preloaded asset (Image or Video element).
+   * Returns null if not found.
+   */
+  getAsset(url) {
+    return this.assetCache.get(url) || null;
   }
 
   // ══════════════════════════ LIFECYCLE ══════════════════════════
@@ -42,17 +127,38 @@ class VideoRenderer {
     };
   }
 
-  renderScene(scene, globalTheme, onComplete) {
+  /**
+   * Render a single scene with rAF loop.
+   * If the scene has an `aiMediaUrl`, the AI media will be drawn as the background.
+   * @param {object} scene
+   * @param {object} globalTheme
+   * @param {function} onComplete - called when scene.estimatedDuration expires
+   * @param {number} [overrideDuration] - if provided, use this instead of scene.estimatedDuration
+   */
+  renderScene(scene, globalTheme, onComplete, overrideDuration) {
     this.stop();
     this.currentScene = scene;
     this.globalTheme = globalTheme || this.globalTheme;
     this.onSceneComplete = onComplete;
     this.sceneTime = 0;
     this.isRunning = true;
-    
+    this.lastTimestamp = 0;
+
+    // Duration: prefer explicit override, then scene estimate, then 10s fallback
+    const duration = overrideDuration || scene.estimatedDuration || 10;
+
     // Reset transient states
     this.initSceneParticles(scene);
-    
+
+    // If the scene has a video asset, start playing it
+    if (scene.aiMediaUrl) {
+      const asset = this.getAsset(scene.aiMediaUrl);
+      if (asset && asset.tagName === 'VIDEO') {
+        asset.currentTime = 0;
+        asset.play().catch(() => {});
+      }
+    }
+
     const loop = (timestamp) => {
       if (!this.isRunning) return;
       if (!this.lastTimestamp) this.lastTimestamp = timestamp;
@@ -61,16 +167,21 @@ class VideoRenderer {
 
       this.sceneTime += dt;
       this.globalTime += dt;
-      
+
       this.draw(dt);
-      
+
       // Scene completion check
-      if (this.sceneTime >= (scene.estimatedDuration || 10)) {
+      if (this.sceneTime >= duration) {
         this.stop();
+        // Pause the video if any
+        if (scene.aiMediaUrl) {
+          const asset = this.getAsset(scene.aiMediaUrl);
+          if (asset && asset.tagName === 'VIDEO') asset.pause();
+        }
         if (this.onSceneComplete) this.onSceneComplete();
         return;
       }
-      
+
       this.animFrame = requestAnimationFrame(loop);
     };
     this.animFrame = requestAnimationFrame(loop);
@@ -86,18 +197,68 @@ class VideoRenderer {
     this.ctx.clearRect(0, 0, this.W, this.H);
   }
 
+  drawIdleScreen() {
+    const ctx = this.ctx;
+    ctx.fillStyle = '#0a0e1a';
+    ctx.fillRect(0, 0, this.W, this.H);
+    ctx.fillStyle = '#ffffff33';
+    ctx.font = '24px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Nhấn "Tạo video ngay" để bắt đầu', this.W / 2, this.H / 2);
+  }
+
+  // ══════════════════════════ AI MEDIA DRAWING (Object-Fit: Cover) ══════════════════════════
+
+  /**
+   * Draw an HTMLImageElement or HTMLVideoElement onto the canvas
+   * with "object-fit: cover" scaling (crop to fill, no distortion).
+   */
+  drawMediaCover(ctx, media) {
+    let sw, sh; // source dimensions
+    if (media.tagName === 'VIDEO') {
+      sw = media.videoWidth || media.width;
+      sh = media.videoHeight || media.height;
+    } else {
+      sw = media.naturalWidth || media.width;
+      sh = media.naturalHeight || media.height;
+    }
+    if (!sw || !sh) return; // Not loaded yet
+
+    const canvasRatio = this.W / this.H;
+    const mediaRatio = sw / sh;
+
+    let sx, sy, sWidth, sHeight;
+
+    if (mediaRatio > canvasRatio) {
+      // Media is wider → crop sides
+      sHeight = sh;
+      sWidth = sh * canvasRatio;
+      sx = (sw - sWidth) / 2;
+      sy = 0;
+    } else {
+      // Media is taller → crop top/bottom
+      sWidth = sw;
+      sHeight = sw / canvasRatio;
+      sx = 0;
+      sy = (sh - sHeight) / 2;
+    }
+
+    ctx.drawImage(media, sx, sy, sWidth, sHeight, 0, 0, this.W, this.H);
+  }
+
   // ══════════════════════════ BACKGROUND ENGINE ══════════════════════════
 
   drawBackground(ctx, bg, theme, time) {
     const type = bg.type || 'gradient';
     const colors = bg.colors || ['#05060e', '#0a0e1a'];
-    
+
     switch (type) {
       case 'solid':
         ctx.fillStyle = colors[0];
         ctx.fillRect(0, 0, this.W, this.H);
         break;
-      
+
       case 'gradient':
         const grad = ctx.createLinearGradient(0, 0, this.W, this.H);
         grad.addColorStop(0, colors[0]);
@@ -137,7 +298,7 @@ class VideoRenderer {
       case 'noise-field':
         this.drawNoiseField(ctx, colors, time);
         break;
-        
+
       default:
         ctx.fillStyle = '#05060e';
         ctx.fillRect(0, 0, this.W, this.H);
@@ -208,44 +369,61 @@ class VideoRenderer {
     if (!this.currentScene) return;
     const ctx = this.ctx;
     const scene = this.currentScene;
-    const progress = Math.min(this.sceneTime / scene.estimatedDuration, 1);
-    
+    const duration = scene._renderDuration || scene.estimatedDuration || 10;
+    const progress = Math.min(this.sceneTime / duration, 1);
+
     this.clear();
-    
-    // 1. Background
-    this.drawBackground(ctx, scene.background, this.globalTheme, this.globalTime);
-    
-    // 2. Camera Transform (Pseudo-3D)
+
+    // ── Layer 0: AI Media Background (if available) ──
+    if (scene.aiMediaUrl) {
+      const asset = this.getAsset(scene.aiMediaUrl);
+      if (asset) {
+        this.drawMediaCover(ctx, asset);
+        // Apply a semi-transparent dark overlay so text is readable on top
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.fillRect(0, 0, this.W, this.H);
+      } else {
+        // Asset not loaded — fallback to procedural background
+        this.drawBackground(ctx, scene.background || {}, this.globalTheme, this.globalTime);
+      }
+    } else {
+      // ── Layer 0: Procedural Background ──
+      this.drawBackground(ctx, scene.background || {}, this.globalTheme, this.globalTime);
+    }
+
+    // ── Layer 1: Camera Transform (Pseudo-3D) ──
     ctx.save();
     this.applyCamera(ctx, scene.camera, progress);
-    
-    // 3. Render Mode Logic
-    switch (scene.renderMode) {
-      case 'particle': this.renderParticleMode(ctx, scene, progress); break;
-      case 'liquid': this.renderLiquidMode(ctx, scene, progress); break;
-      case 'glitch': this.renderGlitchMode(ctx, scene, progress); break;
-      case 'handdrawn':
-      case 'whiteboard': this.renderSketchMode(ctx, scene, progress); break;
-      case '3d': this.render3DMode(ctx, scene, progress); break;
-      default: this.render2DMode(ctx, scene, progress);
+
+    // ── Layer 2: Render Mode Logic (procedural FX — drawn even on top of AI media) ──
+    if (!scene.aiMediaUrl) {
+      switch (scene.renderMode) {
+        case 'particle': this.renderParticleMode(ctx, scene, progress); break;
+        case 'liquid': this.renderLiquidMode(ctx, scene, progress); break;
+        case 'glitch': this.renderGlitchMode(ctx, scene, progress); break;
+        case 'handdrawn':
+        case 'whiteboard': this.renderSketchMode(ctx, scene, progress); break;
+        case '3d': this.render3DMode(ctx, scene, progress); break;
+        default: this.render2DMode(ctx, scene, progress);
+      }
     }
-    
-    // 4. Visual Elements
+
+    // ── Layer 3: Visual Elements ──
     if (scene.visualElements) {
       scene.visualElements.forEach(el => this.renderVisualElement(ctx, el, progress, scene.accentColor));
     }
-    
-    // 5. Headlines
+
+    // ── Layer 4: Headlines ──
     this.renderText(ctx, scene, progress);
-    
+
     ctx.restore();
-    
-    // 6. Overlays
+
+    // ── Layer 5: Overlays (vignette, scanlines, film-grain) ──
     if (scene.overlayEffects) {
       this.applyOverlayEffects(ctx, scene.overlayEffects, this.globalTime);
     }
-    
-    // 7. HUD / Global UI
+
+    // ── Layer 6: HUD / Progress Bar ──
     this.drawProgressBar(progress, scene.accentColor);
   }
 
@@ -254,17 +432,17 @@ class VideoRenderer {
     const centerX = this.W / 2;
     const centerY = this.H / 2;
     ctx.translate(centerX, centerY);
-    
+
     const speed = cam.speed === 'fast' ? 2 : (cam.speed === 'slow' ? 0.5 : 1);
     const p = progress * speed;
-    
+
     switch (cam.motion) {
       case 'dolly-in': ctx.scale(1 + p * 0.2, 1 + p * 0.2); break;
       case 'dolly-out': ctx.scale(1.2 - p * 0.2, 1.2 - p * 0.2); break;
       case 'orbit': ctx.rotate(p * 0.1); break;
       case 'pan-left': ctx.translate(p * 100, 0); break;
       case 'pan-right': ctx.translate(-p * 100, 0); break;
-      case 'shake': 
+      case 'shake':
         ctx.translate((Math.random()-0.5) * 5 * speed, (Math.random()-0.5) * 5 * speed);
         break;
     }
@@ -315,17 +493,19 @@ class VideoRenderer {
       'handwritten': '600 70px "Comic Sans MS", cursive',
       'condensed-dramatic': '900 75px "Arial Narrow", sans-serif'
     };
-    
+
     ctx.font = fontMap[style] || fontMap['bold-impact'];
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    
+
+    // Position text lower when AI media is the background (for visual balance)
+    const hasMedia = !!scene.aiMediaUrl;
     const x = this.W / 2;
-    const y = this.H / 2;
-    
+    const y = hasMedia ? this.H * 0.75 : this.H / 2;
+
     const anim = scene.textAnimation || 'typewriter';
     this.drawAnimatedText(ctx, scene.headlineText, x, y, anim, progress, scene.accentColor);
-    
+
     if (scene.subText) {
       ctx.font = '400 30px sans-serif';
       ctx.fillStyle = '#ffffffaa';
@@ -334,16 +514,23 @@ class VideoRenderer {
   }
 
   drawAnimatedText(ctx, text, x, y, anim, progress, color) {
+    if (!text) return;
     ctx.save();
     ctx.fillStyle = '#ffffff';
-    ctx.shadowColor = color;
+    ctx.shadowColor = color || '#000';
     ctx.shadowBlur = 20;
-    
+
+    // Black text outline for readability on any background
+    ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+    ctx.lineWidth = 4;
+    ctx.lineJoin = 'round';
+
     const p = Math.min(progress * 2, 1); // Entrance speed
-    
+
     switch (anim) {
       case 'typewriter':
         const len = Math.floor(text.length * p);
+        ctx.strokeText(text.substring(0, len), x, y);
         ctx.fillText(text.substring(0, len), x, y);
         if (Math.floor(this.globalTime * 4) % 2 === 0) {
           const tw = ctx.measureText(text.substring(0, len)).width;
@@ -352,6 +539,7 @@ class VideoRenderer {
         break;
       case 'fade':
         ctx.globalAlpha = p;
+        ctx.strokeText(text, x, y);
         ctx.fillText(text, x, y);
         break;
       case 'zoom-wipe':
@@ -359,10 +547,12 @@ class VideoRenderer {
         ctx.translate(x, y);
         ctx.scale(0.5 + p * 0.5, 0.5 + p * 0.5);
         ctx.globalAlpha = p;
+        ctx.strokeText(text, 0, 0);
         ctx.fillText(text, 0, 0);
         ctx.restore();
         break;
       default:
+        ctx.strokeText(text, x, y);
         ctx.fillText(text, x, y);
     }
     ctx.restore();
@@ -373,15 +563,15 @@ class VideoRenderer {
   renderVisualElement(ctx, el, progress, accent) {
     const pos = this.getPosition(el.position);
     const size = el.size === 'large' ? 1.5 : (el.size === 'small' ? 0.6 : 1);
-    
+
     ctx.save();
     ctx.translate(pos.x, pos.y);
     ctx.scale(size, size);
-    
+
     // Entry Animation
     const ep = Math.min(Math.max((progress - (el.delay || 0)) * 3, 0), 1);
     ctx.globalAlpha = ep;
-    
+
     switch (el.type) {
       case 'stat-counter':
         const val = parseInt(el.content) || 0;
@@ -454,6 +644,9 @@ class VideoRenderer {
         case 'film-grain':
           ctx.fillStyle = `rgba(255,255,255,${Math.random() * 0.05})`;
           for (let i = 0; i < 1000; i++) ctx.fillRect(Math.random()*this.W, Math.random()*this.H, 1, 1);
+          break;
+        case 'particles-float':
+          this.drawGlobalParticles(ctx, '#ffffff');
           break;
       }
     });
