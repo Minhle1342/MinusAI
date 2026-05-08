@@ -1,88 +1,53 @@
-# Kiến Trúc Hệ Thống
+# MinusAI Architecture & Technical Deep Dive
 
-## 1. Tổng Quan
-Dự án "Tạo Video Tự Động" (MinusAI) là một công cụ web-based hỗ trợ tự động hoá quá trình tạo video chuyên nghiệp thông qua kịch bản từ AI. Hệ thống sử dụng mô hình ngôn ngữ lớn (Gemini 2.5 Flash) để tự động sinh kịch bản cấu trúc (JSON), kết hợp với ElevenLabs hoặc Google TTS cho giọng đọc, và sử dụng công nghệ Vanilla HTML5 Canvas để render hoạt ảnh trực tiếp trên trình duyệt mà không cần các phần mềm dựng phim truyền thống.
+This document outlines the internal architecture, system modules, and critical design decisions behind the MinusAI video generation engine.
 
-## 2. Cấu Trúc Thư Mục
-Dự án được cấu trúc theo mô hình Client-Server cơ bản chạy chung trên một Node.js backend.
+## 1. System Overview (Client-Server Data Flow)
 
-```
-.
-├── server.js              # File entry point của backend (Express.js)
-├── config.json            # Lưu trữ cấu hình nhạy cảm (API Keys)
-├── package.json           # Khai báo metadata và dependencies của Node.js
-├── .env                   # Chứa các biến môi trường cấu hình (fallback)
-└── public/                # Thư mục chứa toàn bộ mã nguồn Frontend
-    ├── index.html         # Giao diện chính của ứng dụng
-    ├── style.css          # File style tổng của hệ thống
-    ├── app.js             # Logic xử lý giao diện, gọi API và quản lý state
-    └── renderer.js        # Core engine dùng Canvas API để render video
-```
+MinusAI operates on a hybrid architecture where heavy AI inference and data gathering occur on the Node.js backend, while the intensive graphical rendering and video encoding are offloaded to the client's browser using native Web APIs.
 
-## 3. Các Trang & Luồng Chính
-Ứng dụng được thiết kế theo dạng Single Page Application (SPA), mọi tương tác đều diễn ra trên một trang duy nhất.
+**Data Flow:**
+1. **User Input:** User provides a text prompt or selects a news topic via the UI (`index.html`).
+2. **Backend Synthesis (`server.js`):** The Express server receives the request. For "News Hunter", it queries Jina AI Search, truncates the HTML/Markdown payload, and pipes it to Gemini 3.1 Flash with a strict JSON-enforcing `VIDEO_SYSTEM_PROMPT`.
+3. **Audio Generation:** The client requests Text-to-Speech (TTS) via ElevenLabs or Google Translate Proxy (`server.js`), receiving base64 audio buffers.
+4. **Rendering & Encoding (`app.js` & `renderer.js`):** The client pre-mixes all audio, iterates frame-by-frame on an HTML5 Canvas, and passes explicit timestamps to the `WebCodecs` API to generate a final `.webm` blob.
 
-| Trang | File HTML | Mô tả chức năng | JS liên quan |
-| :--- | :--- | :--- | :--- |
-| **Trang chủ** | `public/index.html` | Layout chính chia 2 cột: Bảng điều khiển (trái) và Khu vực xem trước Video/Canvas (phải). Bao gồm cả các modal cài đặt. | `app.js` (UI logic), `renderer.js` (Video Canvas) |
+## 2. Module Breakdown
 
-## 4. Hệ Thống CSS
-- **File chính:** `public/style.css`
-- **Tổ chức:** 
-  - Là Vanilla CSS (thuần), không sử dụng framework (như Tailwind hay Bootstrap).
-  - Sử dụng CSS Variables (Custom Properties) ở `:root` để định nghĩa hệ thống Design Tokens (Màu sắc `bg-base`, `text-primary`, `accent-start`, Typography, Radius, Shadow).
-  - Áp dụng các utility classes cơ bản kết hợp với các component classes (`.btn`, `.form-group`, `.panel`).
-  - Thiết kế mang phong cách Modern, Glassmorphism, Dark mode.
+### `server.js` (The Brain)
+- **AI Orchestration:** Manages API keys (via headers or `.env`) and communicates with Google Gemini.
+- **News Hunter Pipeline:** Implements `POST /api/news-to-video`. Connects to Jina AI Search (and supports Tavily concepts) to fetch live data.
+- **Prompt Engineering:** Enforces anti-hallucination and journalistic standards via the `VIDEO_SYSTEM_PROMPT`, forcing Gemini to act as a TV Producer and output structured JSON (`sceneTitle`, `textContent`, `narration`, `elements`).
+- **TTS Proxy:** Securely routes ElevenLabs premium voice requests and provides a free Google Translate TTS fallback.
 
-## 5. JavaScript
-Kiến trúc Frontend JS thuần, không dùng framework (React/Vue/Angular).
+### `public/app.js` (The Engine)
+- **State Management:** Handles UI tabs, settings, and progress bars.
+- **`ExportEngine`:** The core offline video compiler. Wraps `WebCodecs` (`VideoEncoder`, `AudioEncoder`) and `webm-muxer` to stitch frames and audio into a final video file.
+- **Audio Pre-mixing:** Utilizes `OfflineAudioContext` to sequence the scene narrations and silent gaps into a single, cohesive audio track before video encoding starts.
 
-- **`public/app.js` (Controller/State Manager):**
-  - Khai báo DOM references.
-  - Quản lý trạng thái nội bộ (`isRunning`, `currentScript`, `isPreviewMode`).
-  - Lấy dữ liệu từ form, nối prompt và gọi Backend APIs (`/api/generate-script`, `/api/tts`).
-  - Xử lý Web Audio API cho luồng phát âm thanh.
-- **`public/renderer.js` (Canvas Rendering Engine):**
-  - `VideoRenderer`: Class chính phụ trách vòng lặp render (`requestAnimationFrame`), xử lý hiệu ứng nền, hiệu ứng chữ (`typewriter`, `slide-up`, v.v.), vẽ hạt (particles), xử lý filter (`renderMode`: glitch, neon, retro).
-  - `VisualElementRenderer`: Class xử lý vẽ các phần tử dữ liệu trực quan (`stat-counter`, `progress-bar`, `chart`) trên Canvas, tự động canh chỉnh (align) chống lấp chữ và tự động chạy animation (ease-out).
+### `public/renderer.js` (The Studio)
+- **Canvas Director:** Manages the `requestAnimationFrame` loop (for preview) and manual frame iteration (for offline export).
+- **Typography Engine:** Implements the `wrapText` utility utilizing Greedy Line Breaking and `ctx.measureText` to dynamically fit descriptive paragraphs ("Lower-Third News Tickers") into safe zones.
+- **Visual Element Routing:** Calculates safe screen coordinates (`bottom-left`, `bottom-center`, `bottom-right`) for dynamic charts and statistics, ensuring they never overlap with the Top-Left anchored `sceneTitle`.
+- **Particle & FX System:** Handles background gradients, glitche effects, and cinematic transitions.
 
-## 6. Giao Tiếp Dữ Liệu
-- **Giao thức:** Sử dụng `fetch` API kết hợp JSON.
-- **State Management:** Lưu trong các biến global JS ở `app.js`.
-- **Lưu trữ tĩnh:** 
-  - Không dùng LocalStorage/SessionStorage.
-  - Key cấu hình được gửi lên backend thông qua `/api/config` và backend lưu ra file `config.json` ở phía server.
+## 3. Critical Design Decisions (The "Why")
 
-## 7. Backend & API
-Sử dụng **Node.js** và **Express.js** (`server.js`). Backend chủ yếu đóng vai trò làm Proxy (để giấu API Key an toàn hơn và tránh CORS issues với các dịch vụ bên thứ 3).
+### 1. WebCodecs + webm-muxer vs. MediaRecorder
+**The Problem:** Originally, capturing the canvas stream via `MediaRecorder` resulted in dropped frames, stuttering, and severe A/V desync. `MediaRecorder` relies on real-time wall-clock execution. If a complex Canvas frame takes 30ms to render instead of 16ms, `MediaRecorder` misses the 60fps window, resulting in a slowed-down, choppy video.
+**The Solution:** We transitioned to native **WebCodecs API** (`VideoEncoder`). This allows us to manually render a frame, freeze the state using `createImageBitmap`, and pass it to the encoder with an **explicit, deterministic timestamp** (`timestamp: frameIndex * 1e6 / fps`). 
+**Result:** Even if the GPU is heavily throttled or a frame takes 2 seconds to draw, the resulting video plays back flawlessly at a constant 60fps. A queue throttling mechanism (`encodeQueueSize > 30`) prevents GPU memory exhaustion during large exports.
 
-- **Endpoints:**
-  - `POST /api/config`: Cập nhật cấu hình (Gemini Key, ElevenLabs Key).
-  - `GET /api/config`: Lấy trạng thái config hiện tại (che giấu bớt token).
-  - `POST /api/generate-script`: Nhận prompt từ user, ghép System Prompt và gọi API **Gemini 2.5 Flash**. Tự động parse và fallback nếu JSON bị lỗi format.
-  - `POST /api/tts`: Gọi API Text-to-Speech của **ElevenLabs**.
-  - `GET /api/voices`: Lấy danh sách voice từ ElevenLabs (ưu tiên lọc tiếng Việt).
-  - `GET /api/tts-free`: Proxy gọi API dịch vụ TTS miễn phí của Google Translate, nối các đoạn audio buffer.
-- **Data Layer:** Lưu trữ dữ liệu cấu hình dưới dạng text thông qua file hệ thống `config.json`.
-- **Auth:** Xác thực dựa trên việc lưu trữ cứng (hard-coded) hoặc truyền vào từ UI API Keys, không có tài khoản người dùng (User System).
+### 2. Audio-Visual Synchronization Strategy
+**The Problem:** Web Audio API (`AudioContext`) is designed for real-time playback. Syncing real-time audio playback with an offline, frame-by-frame video renderer is impossible, leading to misaligned lip-syncing or mismatched scene transitions.
+**The Solution:** We implemented an **Absolute Timeline Source of Truth** using `OfflineAudioContext`. 
+1. The system pre-calculates the exact start/end times of every narration clip and transition gap.
+2. `OfflineAudioContext` renders the entire timeline instantly into a single massive AudioBuffer.
+3. During the video frame iteration, the renderer calculates its progress *strictly* against the pre-calculated audio timeline (`activeAudio.currentTime`), ensuring the visual transitions occur precisely when the audio dictates.
 
-## 8. Thư Viện & Dependency Bên Ngoài
-
-| Tên thư viện | Mục đích sử dụng | Nơi áp dụng |
-| :--- | :--- | :--- |
-| **Express.js** | Web Server framework | Backend (`server.js`) |
-| **Axios** | HTTP Client thay cho fetch để tiện lợi hơn | Backend (`server.js`) |
-| **Cors** | Xử lý Cross-Origin | Backend (`server.js`) |
-| **Lucide Icons** | Bộ icon hiển thị UI đẹp, gọn nhẹ | Frontend (CDN trong `<head>`) |
-| **Google Fonts** | Font `Inter` và `Space Grotesk` | Frontend (CDN trong `style.css`) |
-
-## 9. Điểm Cần Lưu Ý Khi Phát Triển
-- **Coupling ở API Prompt:** Logic thiết kế cấu trúc JSON của script (RenderMode, Elements, Animation) được định nghĩa dưới dạng một khối System Prompt khổng lồ gửi cho Gemini. Khi thêm tính năng mới cho video, bắt buộc phải cập nhật prompt text. Hiện tại một phần nằm ở `server.js` (`VIDEO_SYSTEM_PROMPT`) và phần custom (slider, element types) được nối trực tiếp trong `app.js`.
-- **Vanilla Canvas API:** `renderer.js` quản lý state (lưu vị trí, save/restore ctx, clip frame) rất phức tạp. Bất kỳ phép biến đổi (translate) nào cũng phải đi kèm với `ctx.save()` và `ctx.restore()` để không rò rỉ state qua frame tiếp theo.
-- **File Size:** File JS/CSS sẽ phình to nếu thêm nhiều tính năng do không sử dụng module bundler (Webpack/Vite).
-
-## 10. Hướng Phát Triển Tiếp Theo (gợi ý từ phân tích code)
-- **Kiến trúc Module hoá:** Frontend nên bắt đầu tách file theo module ES6 (`<script type="module">`). Chẳng hạn tách riêng `AudioHandler.js`, `APIHandler.js`, và `UIController.js` khỏi `app.js` đang phình to.
-- **Quản lý Prompt động:** System Prompt đang phân tán ở cả `server.js` và `app.js`, chiếm nhiều không gian, có thể lưu thành các file riêng biệt để tải lên linh hoạt thay vì hard-code chuỗi.
-- **Xử lý Bundle:** Áp dụng Vite hoặc Webpack để có thể dễ dàng quản lý dependencies thay vì phải tải file qua script tag.
-- **Hỗ trợ Asset bên ngoài:** Tích hợp tính năng thêm ảnh/video nền (Image/Video Background) thay vì chỉ sử dụng background vẽ bằng code Canvas. Backend có thể bổ sung API upload file tĩnh bằng `multer`.
+### 3. Anti-Hallucination & News Hunter Concurrency
+**The Problem:** LLMs tend to invent facts or write generic fluff when asked to create news scripts. Furthermore, sequential API calls (Search -> TTS -> Render) cause unacceptable UX latency.
+**The Solution:** 
+- **Prompt Engineering:** The `newsPrompt` strictly forces the AI into an "Elite TV News Producer" persona. It mandates the extraction of the "5 Ws" and strictly forbids inventing data not present in the injected `SEARCH DATA`. 
+- **Typography constraints:** By restricting `textContent` to an "ABSOLUTE MAXIMUM 15 WORDS" Lower-Third ticker, we force the LLM to synthesize punchy, factual headlines rather than rambling paragraphs.
+- **Execution:** We handle the latency via a simulated multi-stage UI loading state, keeping the user engaged while `server.js` manages the heavy lifting. Audio tracks are fetched asynchronously using `Promise.allSettled` patterns in the export loop to prepare resources before the encoder needs them.
