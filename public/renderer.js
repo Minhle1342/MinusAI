@@ -213,32 +213,33 @@ class VideoRenderer {
   // ── Text Rendering ────────────────────────────────────────────────────────
   drawTitle(text, animStyle, progress, accentColor, renderMode = 'default', timestamp = 0) {
     const ctx = this.ctx;
-    const centerX = this.W / 2;
-    const centerY = this.H / 2;
+    
+    // Anchor to Top-Left
+    const originX = 60;
+    const originY = 80;
 
-    let x = centerX, y = centerY - 20;
+    let x = originX, y = originY;
     let alpha = 1, scale = 1, blur = 0;
     let charProgress = 1;
 
     const ease = this.easeOutQuart(Math.min(progress * 1.5, 1));
-    const easeIn = this.easeInQuad(Math.max(0, progress * 2 - 1));
 
     switch (animStyle) {
       case 'slide-up':
-        y = centerY - 20 + (1 - ease) * 80;
+        y = originY + (1 - ease) * 40; // Reduced offset for top-left
         alpha = ease;
         break;
       case 'slide-left':
-        x = centerX + (1 - ease) * 120;
+        x = originX + (1 - ease) * 60;
         alpha = ease;
         break;
       case 'zoom-in':
-        scale = 0.4 + ease * 0.6;
+        scale = 0.8 + ease * 0.2;
         alpha = ease;
         break;
       case 'fade-in':
         alpha = ease;
-        blur = (1 - ease) * 8;
+        blur = (1 - ease) * 6;
         break;
       case 'typewriter':
         charProgress = Math.min(progress * 3, 1);
@@ -246,7 +247,7 @@ class VideoRenderer {
         break;
       default:
         alpha = ease;
-        y = centerY - 20 + (1 - ease) * 60;
+        y = originY + (1 - ease) * 30;
     }
 
     ctx.save();
@@ -256,88 +257,96 @@ class VideoRenderer {
     if (blur > 0) ctx.filter = `blur(${blur}px)`;
 
     // Glow shadow
-    if (renderMode === 'hand-drawn') {
-      ctx.shadowBlur = 0;
-    } else {
+    if (renderMode !== 'hand-drawn') {
       ctx.shadowColor = accentColor;
-      ctx.shadowBlur = 30;
+      ctx.shadowBlur = 20;
       if (renderMode === 'neon') {
-        ctx.shadowBlur = 30 + Math.sin(timestamp / 400) * 8;
+        ctx.shadowBlur = 25 + Math.sin(timestamp / 400) * 8;
       }
     }
 
-    // Display text (typewriter: partial chars)
     let displayText = text;
     if (animStyle === 'typewriter' && charProgress < 1) {
       displayText = text.slice(0, Math.floor(charProgress * text.length));
     }
 
-    // Large title font
-    const fontSize = this.calcFontSize(text, 96, this.W - 160);
+    // Title font (Slightly smaller for Top-Left)
+    const fontSize = this.calcFontSize(text, 56, this.W - 160);
     if (renderMode === 'hand-drawn') {
-      ctx.font = `800 ${fontSize}px 'Comic Sans MS', 'Chalkboard SE', 'Marker Felt', system-ui, sans-serif`;
+      ctx.font = `800 ${fontSize}px 'Comic Sans MS', cursive`;
     } else {
-      ctx.font = `800 ${fontSize}px 'Space Grotesk', system-ui, sans-serif`;
+      ctx.font = `800 ${fontSize}px 'Space Grotesk', sans-serif`;
     }
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.letterSpacing = '0.02em';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
 
-    // Gradient fill for text
-    const textGrad = ctx.createLinearGradient(-200, -fontSize/2, 200, fontSize/2);
+    const textGrad = ctx.createLinearGradient(0, 0, 300, 0);
     textGrad.addColorStop(0, '#ffffff');
-    textGrad.addColorStop(0.5, '#f0f0f5');
-    textGrad.addColorStop(1, accentColor + 'cc');
+    textGrad.addColorStop(1, accentColor);
     ctx.fillStyle = textGrad;
     ctx.fillText(displayText, 0, 0);
 
-    // Typing cursor
+    // Cursor
     if (animStyle === 'typewriter' && charProgress < 1) {
       const tw = ctx.measureText(displayText).width;
       ctx.fillStyle = accentColor;
-      ctx.fillRect(tw/2 + 6, -fontSize/2, 4, fontSize);
-    }
-
-    // neon effect
-    if (renderMode === 'neon') {
-      const layers = [
-        { blur: 10, alpha: 0.6 },
-        { blur: 25, alpha: 0.4 },
-        { blur: 50, alpha: 0.2 }
-      ];
-      layers.forEach(layer => {
-        ctx.shadowBlur = layer.blur + Math.sin(timestamp / 400) * 8;
-        ctx.shadowColor = accentColor;
-        ctx.globalAlpha = alpha * layer.alpha;
-        ctx.fillText(displayText, 0, 0);
-      });
-    }
-
-    // hand-drawn sketch border
-    if (renderMode === 'hand-drawn') {
-      const tw = ctx.measureText(displayText).width;
-      const th = fontSize;
-      const padX = 20;
-      const padY = 10;
-      const bx = -tw/2 - padX;
-      const by = -th/2 - padY;
-      const bw = tw + padX * 2;
-      const bh = th + padY * 2;
-
-      ctx.globalAlpha = alpha * 0.7;
-      ctx.strokeStyle = accentColor;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      const jitter = () => (Math.random() - 0.5) * 6;
-      ctx.moveTo(bx + jitter(), by + jitter());
-      ctx.lineTo(bx + bw + jitter(), by + jitter());
-      ctx.lineTo(bx + bw + jitter(), by + bh + jitter());
-      ctx.lineTo(bx + jitter(), by + bh + jitter());
-      ctx.closePath();
-      ctx.stroke();
+      ctx.fillRect(tw + 4, 0, 3, fontSize);
     }
 
     ctx.restore();
+  }
+
+  drawTextContent(text, animStyle, progress, accentColor, renderMode, timestamp) {
+    if (!text) return;
+    const ctx = this.ctx;
+    
+    // Slight delay and smoother entry than title
+    const ease = this.easeOutQuart(Math.min(progress * 1.2, 1));
+    const alpha = ease;
+    const yOffset = (1 - ease) * 20;
+    
+    const x = 60;
+    const y = 160 + yOffset; 
+    
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    
+    const fontSize = 24;
+    ctx.font = `400 ${fontSize}px 'Inter', system-ui, sans-serif`;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    
+    // Wrap and draw
+    this.wrapText(ctx, text, x, y, this.W - 120, fontSize * 1.5);
+    
+    ctx.restore();
+  }
+
+  wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+    if (!text) return 0;
+    const words = text.split(' ');
+    let line = '';
+    let currentY = y;
+    let linesCount = 0;
+
+    for (let n = 0; n < words.length; n++) {
+      const testLine = line + words[n] + ' ';
+      const metrics = ctx.measureText(testLine);
+      const testWidth = metrics.width;
+      
+      if (testWidth > maxWidth && n > 0) {
+        ctx.fillText(line, x, currentY);
+        line = words[n] + ' ';
+        currentY += lineHeight;
+        linesCount++;
+      } else {
+        line = testLine;
+      }
+    }
+    ctx.fillText(line, x, currentY);
+    linesCount++;
+    return linesCount * lineHeight;
   }
 
   calcFontSize(text, maxSize, maxWidth) {
@@ -459,7 +468,7 @@ class VideoRenderer {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = 'rgba(255,255,255,0.08)';
-    ctx.fillText('TuanDevTop', this.W/2, this.H/2);
+    ctx.fillText('VideoTool', this.W/2, this.H/2);
   }
 
   // ── Transition Flash ──────────────────────────────────────────────────────
@@ -477,27 +486,35 @@ class VideoRenderer {
     this.scenes = scenes;
     this.currentSceneIdx = -1;
     this.globalTime = 0;
+    this.offlineMode = false;
+    this.initParticles(); // Re-initialize particles for new session
   }
 
   // Start rendering a specific scene
-  renderScene(idx) {
+  renderScene(idx, now = performance.now()) {
     const scene = this.scenes[idx];
     if (!scene) return;
 
     this.currentSceneIdx = idx;
-    this.sceneStartTime = performance.now();
     this.phase = 'entering';
-    this.phaseTime = 0;
+    this.phaseStartTime = now;
 
     if (this.animFrame) cancelAnimationFrame(this.animFrame);
-    this._renderLoop(scene, performance.now());
+    if (!this.offlineMode) {
+      this._renderLoop(scene, now);
+    }
   }
 
   _renderLoop(scene, lastTime) {
     const now = performance.now();
+    // Cap dt at 0.1 for physics/particles only to prevent them jumping through walls
     const dt = Math.min((now - lastTime) / 1000, 0.1);
-    this.globalTime += dt;
-    this.phaseTime += dt;
+    
+    // globalTime should use absolute wall-clock time so backgrounds never lag
+    this.globalTime = now / 1000;
+    
+    // phaseTime is absolute time since current phase started
+    this.phaseTime = (now - this.phaseStartTime) / 1000;
 
     // Update particles
     this.updateParticles(dt);
@@ -530,8 +547,13 @@ class VideoRenderer {
       overlayAlpha = 1 - enterProgress;
       if (enterProgress >= 1) {
         this.phase = 'displaying';
+        this.phaseStartTime = now;
         this.phaseTime = 0;
-        if (this.onSceneTitleShown) this.onSceneTitleShown(this.currentSceneIdx);
+        
+        if (this.onSceneTitleShown) {
+          this.onSceneTitleShown(this.currentSceneIdx);
+          this.onSceneTitleShown = null;
+        }
       }
     } else if (this.phase === 'exiting') {
       const EXIT_DURATION = 0.5;
@@ -554,14 +576,33 @@ class VideoRenderer {
     this.drawParticles(accent);
     this.drawDecorativeLines(accent, Math.min(enterProgress * 1.5, 1) * (1 - exitProgress * 2), this.globalTime);
     this.drawTitle(scene.sceneTitle, animStyle, enterProgress * (1 - exitProgress), accent, renderMode, now);
+    this.drawTextContent(scene.textContent, animStyle, enterProgress * (1 - exitProgress), accent, renderMode, now);
     
     if (scene.elements && scene.elements.length > 0) {
-      const sceneTime = (now - this.sceneStartTime) / 1000;
-      const duration = scene.duration || scene.estimatedDuration || 5;
-      const sceneProgress = Math.min(sceneTime / duration, 1);
+      let sceneProgress = 0;
+      
+      if (this.phase === 'entering') {
+        sceneProgress = 0;
+      } else if (this.phase === 'exiting' || this.phase === 'done') {
+        sceneProgress = 1;
+      } else {
+        // Displaying phase: Synchronize strictly with audio time (Single Source of Truth)
+        if (window.activeAudio && window.activeAudio.duration > 0) {
+          sceneProgress = window.activeAudio.currentTime / window.activeAudio.duration;
+        } else {
+          // Fallback if no audio
+          const duration = scene.estimatedDuration || 5;
+          sceneProgress = Math.min(this.phaseTime / duration, 1);
+        }
+      }
       
       scene.elements.forEach(element => {
-        const position = VisualElementRenderer.resolvePosition(element.position, this.W, this.H);
+        const position = VisualElementRenderer.resolvePosition(
+          element.position,
+          this.W,
+          this.H,
+          element.type
+        );
         VisualElementRenderer.draw(ctx, element, sceneProgress, accent, position);
       });
     }
@@ -624,15 +665,18 @@ class VideoRenderer {
           }
         }
         
-        const offscreen = document.createElement('canvas');
-        offscreen.width = this.W;
-        offscreen.height = this.H;
-        offscreen.getContext('2d').putImageData(newImageData, 0, 0);
+        if (!this.glitchOffscreenCanvas) {
+          this.glitchOffscreenCanvas = document.createElement('canvas');
+          this.glitchOffscreenCanvas.width = this.W;
+          this.glitchOffscreenCanvas.height = this.H;
+          this.glitchOffscreenCtx = this.glitchOffscreenCanvas.getContext('2d');
+        }
+        this.glitchOffscreenCtx.putImageData(newImageData, 0, 0);
         
         ctx.save();
         ctx.globalCompositeOperation = 'screen';
         ctx.globalAlpha = 0.3;
-        ctx.drawImage(offscreen, 0, 0);
+        ctx.drawImage(this.glitchOffscreenCanvas, 0, 0);
         ctx.restore();
         
       } else {
@@ -690,9 +734,10 @@ class VideoRenderer {
   }
 
   // Called when speech ends — start exit animation
-  exitScene() {
+  exitScene(now = performance.now()) {
     if (this.phase === 'displaying' || this.phase === 'entering') {
       this.phase = 'exiting';
+      this.phaseStartTime = now;
       this.phaseTime = 0;
     }
   }
@@ -704,6 +749,7 @@ class VideoRenderer {
       this.animFrame = null;
     }
     this.phase = 'idle';
+    this.particles = []; // Release particle objects to GC
   }
 
   // Draw completion frame (Ends abruptly as requested)
@@ -716,18 +762,71 @@ class VideoRenderer {
 window.VideoRenderer = VideoRenderer;
 
 class VisualElementRenderer {
-  static resolvePosition(positionString, canvasWidth, canvasHeight) {
-    switch(positionString) {
-      case 'bottom-left':   return { x: 40, y: canvasHeight - 180 };
-      case 'bottom-center': return { x: (canvasWidth - 320) / 2, y: canvasHeight - 200 };
-      case 'bottom-right':  return { x: canvasWidth - 320, y: canvasHeight - 180 };
-      case 'center-left':   return { x: 40, y: (canvasHeight - 120) / 2 };
-      case 'center-right':  return { x: canvasWidth - 300, y: (canvasHeight - 120) / 2 };
-      default: return { x: 40, y: canvasHeight - 180 }; // fallback
+  static resolvePosition(positionString, canvasWidth, canvasHeight, elementType = 'default') {
+    // Charts are 320px wide — require larger right padding
+    const chartRightX = canvasWidth - 370;
+    const chartCenterX = (canvasWidth - 320) / 2;
+
+    // Safe Y coordinates — all elements must begin below this region
+    // Title occupies y: 260–420 (centerY±60px + decorative line + glow)
+    // Tallest chart height: 180px → y_start = canvasHeight - 210 = 510 → ends at 690 ✓
+    const Y_BOTTOM_CHART   = canvasHeight - 210;
+    const Y_BOTTOM_DEFAULT = canvasHeight - 200;
+
+    const yBottom = elementType === 'chart'
+      ? Y_BOTTOM_CHART
+      : Y_BOTTOM_DEFAULT;
+
+    switch (positionString) {
+      case 'bottom-left':
+        return { x: 40, y: yBottom };
+
+      case 'bottom-center':
+        return { x: chartCenterX, y: yBottom };
+
+      case 'bottom-right':
+        // Charts require an extra 40px right padding
+        return {
+          x: elementType === 'chart'
+            ? chartRightX
+            : canvasWidth - 360,
+          y: yBottom
+        };
+
+      // center-left and center-right are forbidden because they overlap the title zone (y=260–420)
+      // Redirect them to bottom positions instead of crashing
+      case 'center-left':
+        return { x: 40, y: yBottom };
+
+      case 'center-right':
+        return {
+          x: elementType === 'chart'
+            ? chartRightX
+            : canvasWidth - 360,
+          y: yBottom
+        };
+
+      default:
+        return { x: 40, y: yBottom };
     }
   }
 
   static draw(ctx, element, sceneProgress, accentColor, position) {
+    // ── GUARD: Force Y into safe zone to avoid title overlap ────────────
+    // Title occupies y: 260–420 on a 720px canvas
+    // Preserve proportional layout: safe_y = canvasHeight - 220 (≈ y >= 500)
+    const canvasHeight = ctx.canvas.height;
+    const MIN_SAFE_Y = canvasHeight - 220;
+
+    if (position.y < MIN_SAFE_Y) {
+      console.warn(
+        `[VisualElementRenderer] position.y=${position.y} violates safe zone (min=${MIN_SAFE_Y}). Auto-correcting.`
+      );
+
+      position.y = MIN_SAFE_Y;
+    }
+    // ────────────────────────────────────────────────────────────────────
+
     const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
     const alpha = Math.min(1, sceneProgress * 4);
     if (alpha <= 0) return;

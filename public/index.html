@@ -8,6 +8,8 @@
   <link rel="stylesheet" href="style.css" />
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <!-- WebM Muxer for Offline Video Export -->
+  <script src="https://unpkg.com/webm-muxer/build/webm-muxer.js"></script>
 </head>
 <body>
 <div class="app-wrapper">
@@ -44,57 +46,96 @@
           </div>
         </div>
         <div class="panel-body">
-          <div class="form-group">
-            <label class="form-label" for="videoPrompt">
-              <i data-lucide="message-square" style="width:13px;height:13px;"></i>
-              Nội dung video bạn muốn tạo
-            </label>
-            <textarea
-              id="videoPrompt"
-              class="form-textarea"
-              rows="4"
-              placeholder="VD: Tạo video giới thiệu về trí tuệ nhân tạo và tác động của nó đến tương lai..."
-            ></textarea>
+          <!-- Mode Tabs -->
+          <div class="mode-tabs">
+            <button class="mode-tab active" data-mode="standard">
+              <i data-lucide="edit-3"></i> Tự soạn
+            </button>
+            <button class="mode-tab" data-mode="news">
+              <i data-lucide="newspaper"></i> Săn tin tức
+            </button>
           </div>
 
-          <div class="form-group">
-            <label class="form-label" for="videoStyle">
-              <i data-lucide="palette" style="width:13px;height:13px;"></i>
-              Phong cách video
-            </label>
-            <select id="videoStyle" class="form-select">
-              <option value="">Để AI tự chọn</option>
-              <option value="cinematic">Cinematic — Điện ảnh</option>
-              <option value="educational">Educational — Giáo dục</option>
-              <option value="promotional">Promotional — Quảng bá</option>
-              <option value="documentary">Documentary — Tài liệu</option>
-              <option value="motivational">Motivational — Truyền cảm hứng</option>
-            </select>
-          </div>
-
-          <div class="form-group">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-              <label class="form-label" for="scene-count-slider" style="margin-bottom: 0;">
-                <i data-lucide="layers" style="width:13px;height:13px;"></i>
-                Số khung hình
+          <!-- Standard Mode -->
+          <div id="mode-standard" class="mode-content active">
+            <div class="form-group">
+              <label class="form-label" for="videoPrompt">
+                <i data-lucide="message-square" style="width:13px;height:13px;"></i>
+                Nội dung video bạn muốn tạo
               </label>
-              <span id="scene-count-display" class="scene-count-badge">6</span>
+              <textarea
+                id="videoPrompt"
+                class="form-textarea"
+                rows="4"
+                placeholder="VD: Tạo video giới thiệu về trí tuệ nhân tạo..."
+              ></textarea>
             </div>
-            <input
-              type="range"
-              id="scene-count-slider"
-              min="1"
-              max="30"
-              value="6"
-              step="1"
-              class="scene-count-slider"
-            />
+
+            <div class="form-group">
+              <label class="form-label" for="videoStyle">
+                <i data-lucide="palette" style="width:13px;height:13px;"></i>
+                Phong cách video
+              </label>
+              <select id="videoStyle" class="form-select">
+                <option value="">Để AI tự chọn</option>
+                <option value="cinematic">Cinematic — Điện ảnh</option>
+                <option value="educational">Educational — Giáo dục</option>
+                <option value="promotional">Promotional — Quảng bá</option>
+                <option value="documentary">Documentary — Tài liệu</option>
+                <option value="motivational">Motivational — Truyền cảm hứng</option>
+              </select>
+            </div>
+
+            <div class="form-group" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border);">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <label class="form-label" for="scene-count-slider" style="margin-bottom: 0;">
+                  <i data-lucide="layers" style="width:13px;height:13px;"></i>
+                  Số khung hình (Scenes)
+                </label>
+                <span id="scene-count-display" class="scene-count-badge">6</span>
+              </div>
+              <input
+                type="range"
+                id="scene-count-slider"
+                min="1"
+                max="30"
+                value="6"
+                step="1"
+                class="scene-count-slider"
+              />
+            </div>
+
+            <button class="btn btn-primary btn-full" id="generateScriptBtn" onclick="handleGenerate()">
+              <i data-lucide="wand-2" style="width:15px;height:15px;"></i>
+              Tạo video ngay
+            </button>
           </div>
 
-          <button class="btn btn-primary btn-full" id="generateScriptBtn" onclick="handleGenerate()">
-            <i data-lucide="wand-2" style="width:15px;height:15px;"></i>
-            Tạo video ngay
-          </button>
+          <!-- News Hunter Mode -->
+          <div id="mode-news" class="mode-content">
+            <div class="form-group">
+              <label class="form-label" for="newsTopicInput">
+                <i data-lucide="search" style="width:13px;height:13px;"></i>
+                Chủ đề tin tức muốn săn
+              </label>
+              <input
+                type="text"
+                id="newsTopicInput"
+                class="form-input"
+                placeholder="VD: Đột phá AI mới nhất, Thị trường chứng khoán..."
+              />
+            </div>
+
+            <div id="newsLoadingStatus" class="news-loading hidden">
+              <div class="news-loading-spinner"></div>
+              <span id="newsLoadingText">🔍 Đang tìm kiếm tin tức...</span>
+            </div>
+
+            <button class="btn btn-primary btn-full" id="btnGenerateNews">
+              <i data-lucide="search-code" style="width:15px;height:15px;"></i>
+              Săn tin & Làm Video
+            </button>
+          </div>
         </div>
       </div>
 
@@ -213,6 +254,10 @@
             <i data-lucide="check-circle-2" style="width:36px;height:36px;color:#fff;"></i>
           </div>
           <h3>Video đã sẵn sàng!</h3>
+          <!-- Video Preview Player -->
+          <div class="video-preview-container" style="width: 100%; margin: 1.5rem 0; background: #000; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
+            <video id="finalPreview" controls style="width: 100%; max-height: 450px; display: block; aspect-ratio: 16/9; object-fit: contain;"></video>
+          </div>
           <div style="display:flex;gap:0.75rem;flex-wrap:wrap;justify-content:center;margin-top:1rem;">
             <a id="downloadLink" href="#" download="video.webm" class="btn btn-success">
               <i data-lucide="download" style="width:15px;height:15px;"></i>

@@ -9,37 +9,14 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-const fs = require('fs');
-
-const CONFIG_PATH = path.join(__dirname, 'config.json');
-
-// Helper to load config
-function loadConfig() {
-  try {
-    if (fs.existsSync(CONFIG_PATH)) {
-      const data = fs.readFileSync(CONFIG_PATH, 'utf8');
-      return JSON.parse(data);
-    }
-  } catch (err) {
-    console.error('Lỗi đọc file config:', err);
-  }
-  return {
-    geminiApiKey: process.env.GEMINI_API_KEY || '',
-    elevenLabsApiKey: process.env.ELEVENLABS_API_KEY || '',
-    elevenLabsVoiceId: process.env.ELEVENLABS_VOICE_ID || 'EXAVITQu4vr4xnSDxMaL',
-  };
+// Extract keys from request headers or fallback to environment variables
+function getGeminiKey(req) {
+  return req.headers['x-gemini-key'] || process.env.GEMINI_API_KEY;
 }
 
-// Helper to save config
-function saveConfig(newConfig) {
-  try {
-    fs.writeFileSync(CONFIG_PATH, JSON.stringify(newConfig, null, 2));
-  } catch (err) {
-    console.error('Lỗi lưu file config:', err);
-  }
+function getElevenLabsKey(req) {
+  return req.headers['x-elevenlabs-key'] || process.env.ELEVENLABS_API_KEY;
 }
-
-let config = loadConfig();
 
 // ─── SYSTEM PROMPT ───────────────────────────────────────────────────────────
 const VIDEO_SYSTEM_PROMPT = `You are an elite video script director and creative storyteller. Your task is to transform any topic into a professional, cinematic video script in strict JSON format.
@@ -57,6 +34,7 @@ JSON STRUCTURE:
     {
       "id": 1,
       "sceneTitle": "SHORT TITLE (MAX 5 WORDS)",
+      "textContent": "Short descriptive text displayed on screen, max 15-20 words. High-level summary of the scene's point.",
       "narration": "Full narration spoken aloud. Write as natural speech, 2-5 sentences. This is what the AI voice will say.",
       "accentColor": "#hexcolor",
       "animationStyle": "slide-up | slide-left | zoom-in | fade-in | typewriter",
@@ -68,6 +46,7 @@ JSON STRUCTURE:
 
 CREATIVE RULES:
 - sceneTitle: MAXIMUM 5 WORDS. Short, punchy, powerful. This is displayed BIG on screen.
+- textContent: 10-20 words summary. Engaging text that complements narration but doesn't duplicate it word-for-word.
 - narration: Natural conversational speech. 2-5 sentences. 8-20 seconds when spoken aloud.
 - Create 5-9 scenes for a complete, well-paced video
 - Scene 1: Hook / Introduction (grab attention)
@@ -82,42 +61,22 @@ LANGUAGE: Match the language of the user's request (Vietnamese if asked in Vietn
 
 // ─── ROUTES ──────────────────────────────────────────────────────────────────
 
-// Save config
-app.post('/api/config', (req, res) => {
-  const { geminiApiKey, elevenLabsApiKey, elevenLabsVoiceId } = req.body;
-  if (geminiApiKey !== undefined) config.geminiApiKey = geminiApiKey;
-  if (elevenLabsApiKey !== undefined) config.elevenLabsApiKey = elevenLabsApiKey;
-  if (elevenLabsVoiceId !== undefined) config.elevenLabsVoiceId = elevenLabsVoiceId;
-  
-  saveConfig(config);
-  res.json({ success: true });
-});
-
-// Get config (masked)
-app.get('/api/config', (req, res) => {
-  res.json({
-    hasGeminiKey: !!config.geminiApiKey,
-    hasElevenLabsKey: !!config.elevenLabsApiKey,
-    elevenLabsVoiceId: config.elevenLabsVoiceId,
-    geminiKeyPreview: config.geminiApiKey ? config.geminiApiKey.slice(0, 8) + '...' : '',
-  });
-});
-
 // Generate script with Gemini
 app.post('/api/generate-script', async (req, res) => {
   const { prompt } = req.body;
-  if (!config.geminiApiKey) return res.status(400).json({ error: 'Gemini API key chưa được cấu hình.' });
+  const geminiKey = getGeminiKey(req);
+  if (!geminiKey) return res.status(401).json({ error: 'Gemini API key is missing. Please configure it in settings.' });
   if (!prompt) return res.status(400).json({ error: 'Vui lòng nhập nội dung video.' });
 
   try {
     const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${config.geminiApiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key=${geminiKey}`,
       {
         system_instruction: { parts: [{ text: VIDEO_SYSTEM_PROMPT }] },
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         generationConfig: {
           temperature: 0.8,
-          maxOutputTokens: 4096,
+          maxOutputTokens: 8192,
           response_mime_type: 'application/json',
         },
       },
@@ -161,9 +120,10 @@ app.post('/api/tts', async (req, res) => {
   const { text, voiceId } = req.body;
   if (!text) return res.status(400).json({ error: 'Text is required' });
 
-  const vid = voiceId || config.elevenLabsVoiceId;
+  const elevenLabsKey = getElevenLabsKey(req);
+  const vid = voiceId || process.env.ELEVENLABS_VOICE_ID || 'EXAVITQu4vr4xnSDxMaL';
 
-  if (!config.elevenLabsApiKey) {
+  if (!elevenLabsKey) {
     // Return empty so frontend uses Web Speech API fallback
     return res.json({ success: false, useFallback: true, reason: 'no_api_key' });
   }
@@ -178,7 +138,7 @@ app.post('/api/tts', async (req, res) => {
       },
       {
         headers: {
-          'xi-api-key': config.elevenLabsApiKey,
+          'xi-api-key': elevenLabsKey,
           'Content-Type': 'application/json',
           Accept: 'audio/mpeg',
         },
@@ -196,10 +156,11 @@ app.post('/api/tts', async (req, res) => {
 
 // Get ElevenLabs voices
 app.get('/api/voices', async (req, res) => {
-  if (!config.elevenLabsApiKey) return res.json({ voices: [] });
+  const elevenLabsKey = getElevenLabsKey(req);
+  if (!elevenLabsKey) return res.json({ voices: [] });
   try {
     const r = await axios.get('https://api.elevenlabs.io/v1/voices', {
-      headers: { 'xi-api-key': config.elevenLabsApiKey },
+      headers: { 'xi-api-key': elevenLabsKey },
     });
     // Filter for Vietnamese or high quality multilingual voices
     const filtered = r.data.voices.filter(v => {
@@ -259,6 +220,98 @@ app.get('/api/tts-free', async (req, res) => {
   }
 });
 
+function getJinaKey(req) {
+  return req.headers['x-jina-key'] || process.env.JINA_API_KEY;
+}
+
+// ── News Hunter Pipeline ───────────────────────────────────────────────────
+app.post('/api/news-to-video', async (req, res) => {
+  const { topic } = req.body;
+  const geminiKey = getGeminiKey(req);
+  const jinaKey = getJinaKey(req);
+
+  if (!topic) return res.status(400).json({ error: 'Vui lòng nhập chủ đề tin tức.' });
+  if (!geminiKey) return res.status(401).json({ error: 'Thiếu Gemini API key.' });
+  if (!jinaKey) return res.status(401).json({ error: 'Thiếu Jina API key. Vui lòng cấu hình trong .env hoặc cài đặt.' });
+
+  try {
+    // 1. Search for news using Jina Search
+    const searchResponse = await axios.get(`https://s.jina.ai/${encodeURIComponent(topic)}`, {
+      headers: { 'Authorization': `Bearer ${jinaKey}` },
+      timeout: 30000 // Tăng lên 30s vì Jina Search có thể cần thời gian để crawl nhiều nguồn tin mới nhất
+    });
+
+    // Truncate search results to first 15000 chars to stay within reasonable limits
+    const searchResults = (searchResponse.data || "").substring(0, 15000);
+    
+    // 2. Synthesize news into a video script using Gemini
+    const newsPrompt = `
+    [ROLE]: You are an elite TV News Producer and a Breaking News Anchor. 
+    
+    [SOURCE MATERIAL]:
+    TOPIC: "${topic}"
+    SEARCH DATA:
+    ${searchResults}
+
+    [OBJECTIVE]:
+    Transform the SEARCH DATA into a professional news broadcast script. 
+    1. EXTRACTION: Identify the "5 Ws" (Who, What, When, Where, Why) and prioritize the most impactful numbers, statistics, or quotes.
+    2. NARRATIVE ARC:
+       - Scene 1: THE HOOK. Announce the breaking news and grab attention.
+       - Middle Scenes: Deliver the core evidence, data points, and context.
+       - Final Scene: THE IMPACT. Conclude with the significance of the story or "What to watch for next".
+
+    [STRICT WRITING & DIRECTING RULES]:
+    - SCENE COUNT: Based on the depth of the SEARCH DATA, create a comprehensive script. MINIMUM 5 SCENES. Let the story dictate the length.
+    - FALLBACK MECHANISM: If the SEARCH DATA is completely empty, irrelevant, or contains only code/errors, output a 1-scene JSON apologizing that no recent breaking news was found for this topic. Do NOT invent facts.
+    - TONE ADAPTATION: Analyze the sentiment of the news. If it is a tragedy or disaster, use a solemn, respectful, and serious tone. If it is tech/entertainment, use an energetic, high-octane tone.
+    - VISUAL DIRECTING: For news videos, heavily favor "corporate", "tech", or "minimal" for \`backgroundTheme\`. Use "slide-left" or "fade-in" for \`animationStyle\` to mimic TV news graphics. Choose \`accentColor\` wisely (e.g., #ef4444 Red for breaking news, #00d4ff Blue for tech/finance).
+    - LANGUAGE: Detect the language of the TOPIC "${topic}". You MUST write the entire JSON response natively in that detected language.
+    - "textContent": Write this as a "Lower-Third News Ticker". It must be a punchy, authoritative summary of the current scene's main fact. ABSOLUTE MAXIMUM 15 TO 30 WORDS.
+    - "narration": Write this for a professional news anchor reading from a teleprompter. Pacing should be 2-5 engaging sentences.
+
+    [OUTPUT]:
+    Provide ONLY the valid JSON object following the VIDEO_SYSTEM_PROMPT schema.
+    `;
+
+    const geminiResponse = await axios.post(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key=${geminiKey}`,
+      {
+        system_instruction: { parts: [{ text: VIDEO_SYSTEM_PROMPT }] },
+        contents: [{ role: 'user', parts: [{ text: newsPrompt }] }],
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 8192,
+          response_mime_type: "application/json"
+        }
+      },
+      { timeout: 45000 } // Tăng lên 45s vì xử lý dữ liệu tin tức thô cần nhiều thời gian suy luận hơn
+    );
+
+    let text = geminiResponse.data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    if (!text) {
+      throw new Error('Gemini did not return any content (possibly safety filtered).');
+    }
+
+    // Clean JSON string
+    text = text.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
+
+    try {
+      const scriptData = JSON.parse(text);
+      res.json(scriptData);
+    } catch (parseErr) {
+      console.error('JSON Parse Error:', text);
+      throw new Error('Kịch bản AI trả về không đúng định dạng JSON.');
+    }
+  } catch (err) {
+    console.error('News Hunter Error:', err.response?.data || err.message);
+    const status = err.response?.status || 500;
+    res.status(status).json({ 
+      error: 'Lỗi săn tin: ' + (err.response?.data?.error?.message || err.message) 
+    });
+  }
+});
+
 // Serve frontend
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
@@ -267,5 +320,5 @@ app.get('*', (req, res) => {
 // ─── START ───────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`\n🎬 TuanDevTop đang chạy tại: http://localhost:${PORT}\n`);
+  console.log(`\n🎬 Tool đang chạy tại: http://localhost:${PORT}\n`);
 });
