@@ -73,19 +73,22 @@
           </div>
 
           <div class="form-group">
-            <label class="form-label" for="animStyleSelect">
-              <i data-lucide="sparkles" style="width:13px;height:13px;"></i>
-              Hiệu ứng chữ (Animation)
-            </label>
-            <select id="animStyleSelect" class="form-select">
-              <option value="ai">Để AI tự chọn cho từng cảnh</option>
-              <option value="glitch">Glitch — Nhiễu sóng Cyberpunk</option>
-              <option value="neon">Neon Pulse — Phát sáng Neon</option>
-              <option value="wave">Wave — Lượn sóng biển</option>
-              <option value="bounce">Bounce — Nhảy nhót vui nhộn</option>
-              <option value="cinematic">Cinematic 3D — Trôi nổi điện ảnh</option>
-              <option value="typewriter">Typewriter — Đánh máy</option>
-            </select>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <label class="form-label" for="scene-count-slider" style="margin-bottom: 0;">
+                <i data-lucide="layers" style="width:13px;height:13px;"></i>
+                Số khung hình
+              </label>
+              <span id="scene-count-display" class="scene-count-badge">6</span>
+            </div>
+            <input
+              type="range"
+              id="scene-count-slider"
+              min="1"
+              max="30"
+              value="6"
+              step="1"
+              class="scene-count-slider"
+            />
           </div>
 
           <button class="btn btn-primary btn-full" id="generateScriptBtn" onclick="handleGenerate()">
@@ -121,51 +124,8 @@
           <div class="tab-content active" id="tab-free">
             <div class="alert alert-success" style="font-size:0.775rem; margin-bottom: 0.75rem;">
               <i data-lucide="sparkles" style="width:14px;height:14px;flex-shrink:0;"></i>
-              <span>Miễn phí — Hỗ trợ nhiều ngôn ngữ qua Google TTS.</span>
+              <span>Giọng đọc Tiếng Việt chất lượng cao.</span>
             </div>
-
-            <div class="form-group">
-              <label class="form-label">
-                <i data-lucide="globe" style="width:13px;height:13px;"></i>
-                Ngôn ngữ / Giọng đọc
-              </label>
-              <select id="freeLangSelect" class="form-select">
-                <optgroup label="🇻🇳 Tiếng Việt">
-                  <option value="vi" selected>Tiếng Việt (Chuẩn)</option>
-                </optgroup>
-                <optgroup label="🇺🇸 Tiếng Anh">
-                  <option value="en">English (General)</option>
-                  <option value="en-us">English (US)</option>
-                  <option value="en-gb">English (UK)</option>
-                  <option value="en-au">English (Australia)</option>
-                </optgroup>
-                <optgroup label="🌏 Châu Á">
-                  <option value="zh-CN">中文 — Tiếng Trung (Giản thể)</option>
-                  <option value="zh-TW">中文 — Tiếng Trung (Phồn thể)</option>
-                  <option value="ja">日本語 — Tiếng Nhật</option>
-                  <option value="ko">한국어 — Tiếng Hàn</option>
-                  <option value="th">ภาษาไทย — Tiếng Thái</option>
-                  <option value="id">Bahasa Indonesia</option>
-                  <option value="ms">Bahasa Melayu — Tiếng Mã Lai</option>
-                  <option value="hi">हिन्दी — Tiếng Hindi</option>
-                </optgroup>
-                <optgroup label="🌍 Châu Âu">
-                  <option value="fr">Français — Tiếng Pháp</option>
-                  <option value="de">Deutsch — Tiếng Đức</option>
-                  <option value="es">Español — Tiếng Tây Ban Nha</option>
-                  <option value="it">Italiano — Tiếng Ý</option>
-                  <option value="pt">Português — Tiếng Bồ Đào Nha</option>
-                  <option value="ru">Русский — Tiếng Nga</option>
-                  <option value="nl">Nederlands — Tiếng Hà Lan</option>
-                  <option value="pl">Polski — Tiếng Ba Lan</option>
-                  <option value="tr">Türkçe — Tiếng Thổ Nhĩ Kỳ</option>
-                </optgroup>
-                <optgroup label="🌐 Khác">
-                  <option value="ar">العربية — Tiếng Ả Rập</option>
-                </optgroup>
-              </select>
-            </div>
-
             <div class="form-group">
               <label class="form-label">Tốc độ đọc</label>
               <input type="range" id="speechRate" min="0.5" max="2.0" step="0.1" value="1.0" style="width:100%;accent-color:#a855f7;" />
@@ -182,38 +142,10 @@
           </div>
 
           <div class="tab-content" id="tab-elevenlabs">
-            <div class="alert alert-success" style="font-size:0.775rem; margin-bottom: 0.75rem;">
-              <i data-lucide="info" style="width:14px;height:14px;flex-shrink:0;"></i>
-              <span>Cần API key ElevenLabs. Giọng từ API sẽ hiện trong mục "Giọng từ tài khoản".</span>
-            </div>
             <div class="form-group">
-              <label class="form-label">
-                <i data-lucide="user" style="width:13px;height:13px;"></i>
-                Chọn giọng đọc
-              </label>
+              <label class="form-label">Chọn giọng</label>
               <select id="voiceSelect" class="form-select">
-                <optgroup label="👩 Giọng nữ" id="voiceGroupFemale">
-                  <option value="EXAVITQu4vr4xnSDxMaL" selected>Sarah — Ấm áp, tự nhiên</option>
-                  <option value="21m00Tcm4TlvDq8ikWAM">Rachel — Bình tĩnh, trầm ấm</option>
-                  <option value="AZnzlk1XvdvUeBnXmlld">Domi — Mạnh mẽ, quyết đoán</option>
-                  <option value="MF3mGyEYCl7XYWbV9V6O">Elli — Trẻ trung, cảm xúc</option>
-                  <option value="jBpfuIE2acCO8z3wKNLl">Gigi — Hoạt bát, năng động</option>
-                  <option value="oWAxZDx7w5VEj9dCyTzz">Grace — Nhẹ nhàng, thanh lịch</option>
-                  <option value="XB0fDUnXU5powFXDhCwa">Charlotte — Chuyên nghiệp, rõ ràng</option>
-                </optgroup>
-                <optgroup label="👨 Giọng nam" id="voiceGroupMale">
-                  <option value="ErXwobaYiN019PkySvjV">Antoni — Biểu cảm, linh hoạt</option>
-                  <option value="TxGEqnHWrfWFTfGW9XjX">Josh — Trầm, kể chuyện</option>
-                  <option value="VR6AewLTigWG4xSOukaG">Arnold — Sắc nét, tự tin</option>
-                  <option value="pNInz6obpgDQGcFmaJgB">Adam — Trầm sâu, thuyết trình</option>
-                  <option value="yoZ06aMxZJJ28mfd3POQ">Sam — Khàn, năng động</option>
-                  <option value="29vD33N1CtxCmqQRPOHJ">Drew — Trung tính, tin tức</option>
-                  <option value="2EiwWnXFnvU5JabPnv8n">Clyde — Mạnh mẽ, chiến binh</option>
-                </optgroup>
-                <optgroup label="🎭 Giọng đặc biệt" id="voiceGroupSpecial">
-                  <option value="ThT5KcBeYPX3keUQqHPh">Dorothy — Cổ điển, ấm áp</option>
-                  <option value="g5CIjZEefAph4nQFvHAz">Premade Ethan — Kể chuyện, tường thuật</option>
-                </optgroup>
+                <option value="EXAVITQu4vr4xnSDxMaL">Sarah (Default)</option>
               </select>
             </div>
             <div class="form-group" style="margin-top: 0.5rem;">

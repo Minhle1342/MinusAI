@@ -94,30 +94,13 @@ async function loadVoices() {
     const data = await r.json();
     if (data.voices.length > 0) {
       const sel = $('voiceSelect');
-
-      // Collect existing pre-made voice IDs to avoid duplicates
-      const existingIds = new Set();
-      sel.querySelectorAll('option').forEach(opt => existingIds.add(opt.value));
-
-      // Filter out voices that already exist in pre-made list
-      const newVoices = data.voices.filter(v => !existingIds.has(v.voice_id));
-
-      if (newVoices.length > 0) {
-        // Remove old API group if re-loading
-        const oldGroup = document.getElementById('voiceGroupAPI');
-        if (oldGroup) oldGroup.remove();
-
-        const group = document.createElement('optgroup');
-        group.id = 'voiceGroupAPI';
-        group.label = '🔑 Giọng từ tài khoản';
-        newVoices.forEach((v) => {
-          const opt = document.createElement('option');
-          opt.value = v.voice_id;
-          opt.textContent = v.name;
-          group.appendChild(opt);
-        });
-        sel.appendChild(group);
-      }
+      sel.innerHTML = '';
+      data.voices.forEach((v) => {
+        const opt = document.createElement('option');
+        opt.value = v.voice_id;
+        opt.textContent = `${v.name}`;
+        sel.appendChild(opt);
+      });
     }
   } catch (e) {}
 }
@@ -129,171 +112,67 @@ $('speechRate').addEventListener('input', (e) => {
 });
 
 // ── Test Voice ────────────────────────────────────────────────────────────────
-const LANG_SAMPLES = {
-  'vi':    'Xin chào! Đây là giọng đọc thử nghiệm của AI Video.',
-  'en':    'Hello! This is a test voice from AI Video.',
-  'en-us': 'Hello! This is a test voice from AI Video.',
-  'en-gb': 'Hello! This is a test voice from AI Video.',
-  'en-au': 'Hello! This is a test voice from AI Video.',
-  'zh-CN': '你好！这是 AI Video 的语音测试。',
-  'zh-TW': '你好！這是 AI Video 的語音測試。',
-  'ja':    'こんにちは！これは AI Video の音声テストです。',
-  'ko':    '안녕하세요! 이것은 AI Video의 음성 테스트입니다.',
-  'th':    'สวัสดี! นี่คือการทดสอบเสียงของ AI Video',
-  'id':    'Halo! Ini adalah uji suara dari AI Video.',
-  'ms':    'Helo! Ini adalah ujian suara daripada AI Video.',
-  'hi':    'नमस्ते! यह AI Video का आवाज़ परीक्षण है।',
-  'fr':    'Bonjour ! Ceci est un test vocal de AI Video.',
-  'de':    'Hallo! Das ist ein Sprachtest von AI Video.',
-  'es':    '¡Hola! Esta es una prueba de voz de AI Video.',
-  'it':    'Ciao! Questo è un test vocale di AI Video.',
-  'pt':    'Olá! Este é um teste de voz do AI Video.',
-  'ru':    'Привет! Это голосовой тест от AI Video.',
-  'nl':    'Hallo! Dit is een spraaktest van AI Video.',
-  'pl':    'Cześć! To jest test głosu od AI Video.',
-  'tr':    'Merhaba! Bu AI Video\'un ses testidir.',
-  'ar':    'مرحباً! هذا اختبار صوتي من AI Video.',
-};
-
 $('testVoiceFreeBtn').addEventListener('click', async () => {
-  const lang = ($('freeLangSelect') && $('freeLangSelect').value) || 'vi';
-  const sample = LANG_SAMPLES[lang] || LANG_SAMPLES['vi'];
-  await speakFreeTTS(sample);
+  await speakText('Xin chào! Đây là giọng đọc thử nghiệm của TuanDevTop.');
 });
 $('testVoiceBtn').addEventListener('click', async () => {
-  const voiceName = $('voiceSelect').selectedOptions[0]?.textContent || 'ElevenLabs';
-  const success = await speakElevenLabs('Hello! This is a voice test from TuanDevTop. Xin chào, đây là giọng đọc thử nghiệm.');
-  if (!success) {
-    alert('Không thể phát giọng "' + voiceName.split('—')[0].trim() + '". Hãy kiểm tra API key ElevenLabs trong phần Cài đặt.');
-  }
+  await speakText('Xin chào! Đây là giọng đọc của ElevenLabs.');
 });
 
-// ── Generate Script via SSE Stream ────────────────────────────────────────────
+// ── Generate Script & Auto-Start ──────────────────────────────────────────────
 window.handleGenerate = async () => {
-  const prompt = $('videoPrompt').value.trim();
-  if (!prompt) return alert('Vui lòng nhập nội dung video!');
+  const basePrompt = $('videoPrompt').value.trim();
+  if (!basePrompt) return alert('Vui lòng nhập nội dung video!');
 
-  // Resume audio context on user gesture
+  const sceneCount = parseInt(document.getElementById('scene-count-slider').value) || 6;
+
+  let prompt = basePrompt + `\n\nEach scene may contain a "renderMode" field with the values: "default", "glitch", "hand-drawn", "neon", "retro".\n\nChoose renderMode based on scene content:\n- "glitch": technology, hacking, security, AI, error-related scenes\n- "hand-drawn": ideas, creativity, educational explanations, conceptual scenes\n- "neon": opening titles, CTA scenes, major highlights\n- "retro": history, nostalgia, before/after comparisons\n- "default": normal scenes\n\nNot every scene needs a non-default renderMode.\n\nEach scene may contain an "elements" field — an array of up to 3 visual elements.\n\nOnly add elements when the scene contains numbers, statistics, or concrete comparisons.\nDo not add elements to intro scenes or ending scenes.\n\nElement types:\n\n- "stat-counter"\n  Use when there is a single highlighted number (revenue, users, percentages, etc.)\n  Required fields: type, label, value (number), position\n  Optional fields: prefix (default ""), suffix (default "")\n\n- "progress-bar"\n  Use when there is a percentage or completion metric\n  Required fields: type, label, percent (0-100), position\n\n- "chart"\n  Use when multiple data points need comparison (minimum 3 points)\n  Required fields:\n    type,\n    chartType ("bar" or "line"),\n    label,\n    data (array of {label, value}),\n    position\n\n  Maximum 6 data points.\n\nValid positions: "bottom-left", "bottom-center", "bottom-right", "center-left", "center-right". Maximum 3 elements per scene, no duplicated positions.\nDo not invent statistics — only use numbers provided by the user or numbers that reasonably match the content context.`;
+
+  prompt += `\n\nGenerate a video script with EXACTLY ${sceneCount} scenes — no more, no fewer.\n\nDistribute the content evenly and logically across ${sceneCount} scenes.\n\n`;
+  if (sceneCount <= 3) {
+    prompt += `If ${sceneCount} is small (1–3):\nFocus only on the most essential points.\n\n`;
+  } else if (sceneCount >= 15) {
+    prompt += `If ${sceneCount} is large (15–30):\nExpand with more detail, examples, and deeper analysis.\n\n`;
+  }
+
+  // Resume context on user gesture
   if (audioCtx && audioCtx.state === 'suspended') {
     audioCtx.resume();
   }
 
   const btn = $('generateScriptBtn');
   btn.disabled = true;
-  btn.innerHTML = '<span class="spin"></span> Đang kết nối AI Director...';
+  btn.innerHTML = '<span class="spin"></span> Đang xử lý...';
 
-  const animStyle = $('animStyleSelect')?.value || 'ai';
+  try {
+    const r = await fetch('/api/generate-script', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt }),
+    });
+    
+    const data = await r.json();
+    if (!data.success) throw new Error(data.error);
 
-  // Build SSE URL with query params
-  const params = new URLSearchParams({ prompt, animStyle });
-  const evtSource = new EventSource(`/api/generate-stream?${params.toString()}`);
-
-  // Track received script and video assets
-  let receivedScript = null;
-  let videoAssets = []; // Array of { frame, videoUrl }
-
-  // Show progress section
-  progressSection.style.display = 'block';
-  setProgress(5, '🎬 Đang kết nối Groq Director...');
-
-  evtSource.addEventListener('progress', (e) => {
-    const data = JSON.parse(e.data);
-    setProgress(data.pct, data.label);
-    btn.innerHTML = `<span class="spin"></span> ${data.label}`;
-  });
-
-  evtSource.addEventListener('script', (e) => {
-    const data = JSON.parse(e.data);
-    receivedScript = data.script;
-  });
-
-  evtSource.addEventListener('scene-ready', (e) => {
-    const data = JSON.parse(e.data);
-    // If the backend sends a videoUrl or imageUrl with the scene, collect it
-    if (data.scene?.aiMediaUrl) {
-      videoAssets.push({ frame: data.sceneIndex, url: data.scene.aiMediaUrl });
-    }
-    log(`Scene ${data.sceneIndex + 1} visual ready`);
-  });
-
-  evtSource.addEventListener('scene-error', (e) => {
-    const data = JSON.parse(e.data);
-    log(`Scene ${data.sceneIndex + 1} visual error: ${data.error}`, 'warn');
-  });
-
-  evtSource.addEventListener('complete', async (e) => {
-    evtSource.close();
-    const data = JSON.parse(e.data);
     currentScript = data.script;
 
-    // ── Map video/image assets to scenes ──
-    if (data.videoAssets && Array.isArray(data.videoAssets)) {
-      data.videoAssets.forEach(asset => {
-        const idx = asset.frame - 1; // frame is 1-indexed
-        if (currentScript.scenes[idx]) {
-          currentScript.scenes[idx].aiMediaUrl = asset.videoUrl || asset.imageUrl;
-        }
-      });
+    if (currentScript.scenes && currentScript.scenes.length !== sceneCount) {
+      console.warn(`Gemini returned ${currentScript.scenes.length} scenes, requested ${sceneCount}. Continuing with actual count.`);
     }
-    // Also map any assets collected during streaming
-    videoAssets.forEach(asset => {
-      if (currentScript.scenes[asset.frame]) {
-        currentScript.scenes[asset.frame].aiMediaUrl = asset.url;
-      }
-    });
-
-    // ── Preload all AI media assets before rendering ──
-    const allMediaUrls = currentScript.scenes
-      .map(s => s.aiMediaUrl)
-      .filter(Boolean);
-
-    if (allMediaUrls.length > 0) {
-      setProgress(96, '📦 Đang tải tài nguyên media...');
-      btn.innerHTML = '<span class="spin"></span> Đang tải media...';
-      await renderer.preloadAssets(allMediaUrls, (loaded, total) => {
-        const pct = 96 + (loaded / total) * 4;
-        setProgress(pct, `📦 Đã tải ${loaded}/${total} tài nguyên`);
-      });
-    }
-
-    // Reset button
-    btn.disabled = false;
-    btn.innerHTML = '<i data-lucide="wand-2" style="width:15px;height:15px;"></i> Tạo video ngay';
-    lucide.createIcons();
 
     canvasOverlay.classList.add('hidden');
+    
+    // Auto-start creation immediately without showing the script
     isPreviewMode = false;
     startCreation(true);
-  });
-
-  evtSource.addEventListener('error', (e) => {
-    // Check if it's a custom error event or connection error
-    if (e.data) {
-      const data = JSON.parse(e.data);
-      alert('Lỗi: ' + data.message);
-    } else {
-      // Connection error — EventSource auto-reconnects, but we close it
-      alert('Lỗi kết nối đến server. Vui lòng thử lại.');
-    }
-    evtSource.close();
-
+    
+  } catch (e) {
+    alert('Lỗi: ' + e.message);
+  } finally {
     btn.disabled = false;
     btn.innerHTML = '<i data-lucide="wand-2" style="width:15px;height:15px;"></i> Tạo video ngay';
     lucide.createIcons();
-    progressSection.style.display = 'none';
-  });
-
-  // Native EventSource error (connection lost)
-  evtSource.onerror = () => {
-    // Only handle if not already closed
-    if (evtSource.readyState === EventSource.CLOSED) return;
-    evtSource.close();
-
-    btn.disabled = false;
-    btn.innerHTML = '<i data-lucide="wand-2" style="width:15px;height:15px;"></i> Tạo video ngay';
-    lucide.createIcons();
-    progressSection.style.display = 'none';
-  };
+  }
 };
 
 // ── Script Preview (Logic hidden as requested) ────────────────────────────────
@@ -373,28 +252,18 @@ function setButtonState(state) {
 }
 
 // ── TTS Logic ─────────────────────────────────────────────────────────────────
-
-/**
- * Speak text using the selected TTS engine.
- * Returns a Promise<number> that resolves with the audio duration in seconds.
- */
 async function speakText(text) {
   if (activeTab === 'elevenlabs') {
-    const result = await speakElevenLabs(text);
-    if (result) return result;
+    const success = await speakElevenLabs(text);
+    if (success) return;
   }
   return speakFreeTTS(text);
 }
 
-/**
- * Free TTS via Google Translate.
- * Resolves with audio duration in seconds, or 0 on failure.
- */
 function speakFreeTTS(text) {
   return new Promise(async (resolve) => {
     try {
-      const lang = ($('freeLangSelect') && $('freeLangSelect').value) || 'vi';
-      const r = await fetch(`/api/tts-free?text=${encodeURIComponent(text)}&tl=${encodeURIComponent(lang)}`);
+      const r = await fetch(`/api/tts-free?text=${encodeURIComponent(text)}`);
       if (!r.ok) throw new Error('TTS Failed');
       const blob = await r.blob();
       const url = URL.createObjectURL(blob);
@@ -409,27 +278,22 @@ function speakFreeTTS(text) {
       }
 
       audio.onended = () => { 
-        const duration = audio.duration || 0;
         URL.revokeObjectURL(url); 
         activeAudio = null;
-        resolve(duration); 
+        resolve(true); 
       };
       audio.onerror = () => {
         activeAudio = null;
-        resolve(0);
+        resolve(false);
       };
       audio.play();
     } catch (e) { 
       activeAudio = null;
-      resolve(0); 
+      resolve(false); 
     }
   });
 }
 
-/**
- * ElevenLabs TTS.
- * Resolves with audio duration in seconds, or false on failure.
- */
 function speakElevenLabs(text) {
   return new Promise(async (resolve) => {
     try {
@@ -458,10 +322,9 @@ function speakElevenLabs(text) {
       }
 
       audio.onended = () => { 
-        const duration = audio.duration || 0;
         URL.revokeObjectURL(url); 
         activeAudio = null;
-        resolve(duration); 
+        resolve(true); 
       };
       audio.onerror = () => {
         activeAudio = null;
@@ -511,16 +374,8 @@ async function startCreation(withRecording) {
   progressSection.style.display = 'block';
   canvasOverlay.classList.add('hidden');
 
-  // Prepare scenes and global theme
-  const scenes = currentScript.scenes;
-  const globalTheme = currentScript.globalTheme || {
-    colorPalette: ['#ffffff', '#888888', '#000000'],
-    mood: 'intense',
-    fontStyle: 'bold-impact',
-    transitionStyle: 'crossfade'
-  };
-
-  renderer.setScenes(scenes, globalTheme);
+  const scenes = currentScript.scenes.map(s => ({ ...s, videoTitle: currentScript.videoTitle || '' }));
+  renderer.setScenes(scenes);
 
   let recorder = null;
   if (withRecording) {
@@ -529,12 +384,12 @@ async function startCreation(withRecording) {
       const audioStream = await setupAudioCapture();
       let combinedStream = audioStream ? new MediaStream([...canvasStream.getVideoTracks(), ...audioStream.getAudioTracks()]) : canvasStream;
       
-      recorder = new MediaRecorder(combinedStream, { mimeType: 'video/webm', videoBitsPerSecond: 6000000 });
+      recorder = new MediaRecorder(combinedStream, { mimeType: 'video/webm', videoBitsPerSecond: 4000000 });
       recorder.ondataavailable = (e) => { if (e.data.size > 0) recordedChunks.push(e.data); };
       recorder.onstop = () => {
         videoBlob = new Blob(recordedChunks, { type: 'video/webm' });
         downloadLink.href = URL.createObjectURL(videoBlob);
-        downloadLink.download = `VIDEO_AI_${Date.now()}.webm`;
+        downloadLink.download = `TuanDevTop_${Date.now()}.webm`;
         downloadSection.style.display = 'block';
         downloadSection.scrollIntoView({ behavior: 'smooth' });
       };
@@ -543,47 +398,26 @@ async function startCreation(withRecording) {
     } catch (e) { withRecording = false; }
   }
 
-  // ── Scene Loop ─────────────────────────────────────────────────────────────
   for (let i = 0; i < scenes.length; i++) {
     if (!isRunning) break;
     const scene = scenes[i];
-    
-    // Update Progress
-    const pct = Math.floor((i / scenes.length) * 100);
-    setProgress(pct, `Đang tạo cảnh ${i + 1}/${scenes.length}: "${scene.sceneTitle}"`);
+    setProgress((i / scenes.length) * 100, `Đang xử lý cảnh ${i + 1}...`);
 
-    // 1. Handle Hook (Scene 1 only)
-    if (i === 0 && scene.hookType && scene.hookType !== 'none') {
-      await handleHookEffect(scene.hookType, scene.accentColor);
-    }
-
-    // 2. Start audio and renderer in parallel.
-    //    The renderer runs a rAF loop; audio plays independently.
-    //    We wait for BOTH to finish. If the video asset is shorter than the
-    //    audio, the renderer loops the video (video.loop = true by default).
-    //    If audio finishes first, the renderer keeps drawing until its
-    //    duration expires. We use the longer of the two as the scene duration.
-
-    // Launch audio — resolves when narration ends, returns duration in seconds
-    const audioPromise = speakText(scene.narration);
-
-    // Launch renderer — resolves when scene.estimatedDuration expires
-    const renderPromise = new Promise(resolve => {
-      renderer.renderScene(scene, globalTheme, resolve);
+    await new Promise(res => {
+      renderer.onSceneTitleShown = res;
+      renderer.renderScene(i);
     });
 
-    // Wait for both to complete
-    const [audioDuration] = await Promise.all([audioPromise, renderPromise]);
-
-    // If the audio was longer than estimatedDuration, the renderer already
-    // stopped but audio was still playing. To handle this: if we detect the
-    // audio ran past the render, we extend by re-starting the render for
-    // the remaining time. In practice, since we wait for both Promises,
-    // the audio promise won't resolve until the audio finishes playing.
-    // The renderer completes at estimatedDuration, and audio at its own pace,
-    // so whichever finishes last determines when the loop moves to next scene.
-
+    await new Promise(res => setTimeout(res, 300));
     if (!isRunning) break;
+
+    await speakText(scene.narration);
+    if (!isRunning) break;
+
+    await new Promise(res => {
+      renderer.onSceneComplete = res;
+      renderer.exitScene();
+    });
   }
 
   if (isRunning) {
@@ -593,35 +427,21 @@ async function startCreation(withRecording) {
     isRunning = false;
     setButtonState('done');
     progressSection.style.display = 'none';
-    lucide.createIcons();
   }
 }
 
-async function handleHookEffect(type, color) {
-  return new Promise(async resolve => {
-    renderer.clear();
-    const ctx = canvas.getContext('2d');
-    
-    if (type === 'dramatic-countdown') {
-      for (let n = 3; n > 0; n--) {
-        renderer.clear();
-        ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = color || '#fff';
-        ctx.font = 'bold 200px sans-serif';
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText(n, canvas.width/2, canvas.height/2);
-        await new Promise(r => setTimeout(r, 800));
-      }
-    } else if (type === 'shocking-stat') {
-      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = '#ff3333';
-      ctx.font = 'bold 120px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText("ATTENTION!", canvas.width/2, canvas.height/2);
-      await new Promise(r => setTimeout(r, 1200));
-    }
-    resolve();
-  });
+// ── Scene Count Slider Init ───────────────────────────────────────────────────
+const countSlider = $('scene-count-slider');
+const countDisplay = $('scene-count-display');
+
+const updateSlider = (val) => {
+  countDisplay.textContent = val;
+  countSlider.style.setProperty('--value', `${((val - 1) / 29) * 100}%`);
+};
+
+if (countSlider && countDisplay) {
+  countSlider.addEventListener('input', () => updateSlider(parseInt(countSlider.value)));
+  updateSlider(parseInt(countSlider.value));
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
