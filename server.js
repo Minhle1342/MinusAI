@@ -3,20 +3,20 @@ const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
 const path = require('path');
+const { MsEdgeTTS, OUTPUT_FORMAT } = require('msedge-tts');
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
+const tts = new MsEdgeTTS();
+
 // Extract keys from request headers or fallback to environment variables
 function getGeminiKey(req) {
   return req.headers['x-gemini-key'] || process.env.GEMINI_API_KEY;
 }
-
-function getElevenLabsKey(req) {
-  return req.headers['x-elevenlabs-key'] || process.env.ELEVENLABS_API_KEY;
-}
+// Note: Fish Audio integration removed. Using Microsoft Edge TTS exclusively for free TTS.
 
 // ─── SYSTEM PROMPT ───────────────────────────────────────────────────────────
 const VIDEO_SYSTEM_PROMPT = `You are an elite video script director and creative storyteller. Your task is to transform any topic into a professional, cinematic video script in strict JSON format.
@@ -39,12 +39,14 @@ JSON STRUCTURE:
       "accentColor": "#hexcolor",
       "animationStyle": "slide-up | slide-left | zoom-in | fade-in | typewriter",
       "backgroundTheme": "tech | nature | abstract | space | corporate | minimal",
+      "imagePrompt": "A highly descriptive, English prompt describing the scene visually. Used for AI image generation. Max 15 words.",
       "estimatedDuration": seconds_number
     }
   ]
 }
 
 CREATIVE RULES:
+- imagePrompt: Create visually striking, photorealistic image prompts relevant to the textContent. Use English even if the narration is in another language. Max 15 words. MUST be included for EVERY scene.
 - sceneTitle: MAXIMUM 5 WORDS. Short, punchy, powerful. This is displayed BIG on screen.
 - textContent: 10-20 words summary. Engaging text that complements narration but doesn't duplicate it word-for-word.
 - narration: Natural conversational speech. 2-5 sentences. 8-20 seconds when spoken aloud.
@@ -75,7 +77,7 @@ app.post('/api/generate-script', async (req, res) => {
         system_instruction: { parts: [{ text: VIDEO_SYSTEM_PROMPT }] },
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         generationConfig: {
-          temperature: 0.8,
+          temperature: 0.7,
           maxOutputTokens: 8192,
           response_mime_type: 'application/json',
         },
@@ -91,20 +93,30 @@ app.post('/api/generate-script', async (req, res) => {
     try {
       scriptData = JSON.parse(text);
     } catch (parseErr) {
-      // Try to clean up text if it failed
+      console.warn("Lỗi phân tích JSON gốc, đang thử dọn dẹp chuyên sâu...");
       try {
-        // Remove potential trailing commas before closing braces/brackets
-        let cleanedText = text.replace(/,\s*([\]}])/g, '$1');
-        // Extract only the part between the first { and last }
-        const match = cleanedText.match(/\{[\s\S]*\}/);
-        if (match) {
-          scriptData = JSON.parse(match[0]);
-        } else {
-          throw parseErr;
+        const start = text.indexOf('{');
+        if (start === -1) throw parseErr;
+        let cleaned = text.substring(start);
+
+        // Iteratively try to find the correct ending
+        let success = false;
+        let lastEnd = cleaned.lastIndexOf('}');
+        while (lastEnd !== -1) {
+          try {
+            let attempt = cleaned.substring(0, lastEnd + 1);
+            attempt = attempt.replace(/,\s*([\]}])/g, '$1');
+            scriptData = JSON.parse(attempt);
+            success = true;
+            break;
+          } catch (e) {
+            lastEnd = cleaned.lastIndexOf('}', lastEnd - 1);
+          }
         }
-      } catch (innerErr) {
-        console.error('Lỗi phân tích JSON gốc:', text);
-        throw new Error('Không thể phân tích JSON từ Gemini: ' + text.slice(0, 200));
+        if (!success) throw parseErr;
+      } catch (finalErr) {
+        console.error("Gemini error: Không thể phân tích JSON từ Gemini:", text);
+        return res.status(500).json({ error: 'AI trả về định dạng kịch bản không hợp lệ. Vui lòng thử lại.' });
       }
     }
 
@@ -115,63 +127,118 @@ app.post('/api/generate-script', async (req, res) => {
   }
 });
 
-// Generate TTS with ElevenLabs
+// Generate TTS with Edge-TTS (Keyless & Free)
 app.post('/api/tts', async (req, res) => {
-  const { text, voiceId } = req.body;
+  const { text, voiceId, voiceStyle } = req.body;
   if (!text) return res.status(400).json({ error: 'Text is required' });
 
-  const elevenLabsKey = getElevenLabsKey(req);
-  const vid = voiceId || process.env.ELEVENLABS_VOICE_ID || 'EXAVITQu4vr4xnSDxMaL';
+  // Use requested voice or default to Vietnamese neural
+  const vid = voiceId || 'vi-VN-HoaiMyNeural';
 
-  if (!elevenLabsKey) {
-    // Return empty so frontend uses Web Speech API fallback
-    return res.json({ success: false, useFallback: true, reason: 'no_api_key' });
-  }
-
+  // ── Edge-TTS (Free) ──
   try {
-    const response = await axios.post(
-      `https://api.elevenlabs.io/v1/text-to-speech/${vid}`,
-      {
-        text,
-        model_id: 'eleven_multilingual_v2',
-        voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.3, use_speaker_boost: true },
-      },
-      {
-        headers: {
-          'xi-api-key': elevenLabsKey,
-          'Content-Type': 'application/json',
-          Accept: 'audio/mpeg',
-        },
-        responseType: 'arraybuffer',
-      }
-    );
+    // TC1: Handle long text / TC2: Network Timeout
+    const generateAudio = () => new Promise(async (resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Edge-TTS request timed out (15s)')), 15000);
+      
+      try {
+        // Extract locale from voiceId (e.g., 'vi-VN-HoaiMyNeural' -> 'vi-VN')
+        const parts = vid.split('-');
+        const locale = parts.length >= 2 ? `${parts[0]}-${parts[1]}` : 'vi-VN';
 
-    const base64 = Buffer.from(response.data).toString('base64');
+        // ── Resolve speaking style → prosody parameters ──────────────────────────
+        const STYLE_PRESETS = {
+          'default':     { rate: '+0%',   pitch: '+0Hz',  volume: '+0%'  },
+          'slow':        { rate: '-30%',  pitch: '-2Hz',  volume: '+0%'  },
+          'fast':        { rate: '+30%',  pitch: '+0Hz',  volume: '+0%'  },
+          'serious':     { rate: '-10%',  pitch: '-8Hz',  volume: '+5%'  },
+          'energetic':   { rate: '+20%',  pitch: '+8Hz',  volume: '+10%' },
+          'calm':        { rate: '-15%',  pitch: '-4Hz',  volume: '-5%'  },
+          'cheerful':    { rate: '+10%',  pitch: '+6Hz',  volume: '+5%'  },
+          'documentary': { rate: '-5%',   pitch: '-3Hz',  volume: '+0%'  },
+          'news':        { rate: '+5%',   pitch: '+2Hz',  volume: '+8%'  },
+        };
+
+        const style = req.body.voiceStyle || 'default';
+        const prosody = STYLE_PRESETS[style] || STYLE_PRESETS['default'];
+
+        await tts.setMetadata(vid, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3, locale);
+        
+        // Pass prosody options to the stream
+        const { audioStream } = tts.toStream(text, {
+          rate: prosody.rate,
+          pitch: prosody.pitch,
+          volume: prosody.volume,
+        });
+        
+        if (!audioStream || typeof audioStream.on !== 'function') {
+          throw new Error('Edge-TTS không thể khởi tạo luồng âm thanh (stream).');
+        }
+
+        const chunks = [];
+        audioStream.on('data', (chunk) => chunks.push(chunk));
+        audioStream.on('end', () => {
+          clearTimeout(timeout);
+          resolve(Buffer.concat(chunks));
+        });
+        audioStream.on('error', (err) => {
+          clearTimeout(timeout);
+          reject(err);
+        });
+      } catch (e) {
+        clearTimeout(timeout);
+        reject(e);
+      }
+    });
+
+    const audioBuffer = await generateAudio();
+    const base64 = audioBuffer.toString('base64');
+    
     res.json({ success: true, audio: base64, mimeType: 'audio/mpeg' });
   } catch (err) {
-    console.error('ElevenLabs error:', err.response?.status, err.message);
+    console.error('Edge-TTS error:', err.message);
     res.json({ success: false, useFallback: true, reason: err.message });
   }
 });
 
-// Get ElevenLabs voices
+// Get Edge-TTS voices
 app.get('/api/voices', async (req, res) => {
-  const elevenLabsKey = getElevenLabsKey(req);
-  if (!elevenLabsKey) return res.json({ voices: [] });
-  try {
-    const r = await axios.get('https://api.elevenlabs.io/v1/voices', {
-      headers: { 'xi-api-key': elevenLabsKey },
-    });
-    // Filter for Vietnamese or high quality multilingual voices
-    const filtered = r.data.voices.filter(v => {
-      const name = v.name.toLowerCase();
-      const labels = JSON.stringify(v.labels || {}).toLowerCase();
-      return name.includes('viet') || labels.includes('viet');
-    });
-    res.json({ voices: (filtered.length > 0 ? filtered : r.data.voices).slice(0, 20) });
-  } catch {
-    res.json({ voices: [] });
-  }
+  // Curated Edge TTS voice list — grouped by language and use case
+  const EDGE_VOICES = [
+
+    // ── Vietnamese ───────────────────────────────────────────────────────
+    { voice_id: 'vi-VN-HoaiMyNeural',   name: '🇻🇳 Hoài My — Nữ (Thân thiện)',     lang: 'vi', gender: 'female' },
+    { voice_id: 'vi-VN-NamMinhNeural',  name: '🇻🇳 Nam Minh — Nam (Thân thiện)',    lang: 'vi', gender: 'male'   },
+
+    // ── English (US) ─────────────────────────────────────────────────────
+    { voice_id: 'en-US-AriaNeural',        name: '🇺🇸 Aria — Female (Positive, Confident)',  lang: 'en', gender: 'female' },
+    { voice_id: 'en-US-JennyNeural',       name: '🇺🇸 Jenny — Female (Friendly, Assistant)', lang: 'en', gender: 'female' },
+    { voice_id: 'en-US-SaraNeural',        name: '🇺🇸 Sara — Female (Cheerful)',              lang: 'en', gender: 'female' },
+    { voice_id: 'en-US-ChristopherNeural', name: '🇺🇸 Christopher — Male (Reliable)',         lang: 'en', gender: 'male'   },
+    { voice_id: 'en-US-EricNeural',        name: '🇺🇸 Eric — Male (Rational)',                lang: 'en', gender: 'male'   },
+    { voice_id: 'en-US-GuyNeural',         name: '🇺🇸 Guy — Male (Passionate)',               lang: 'en', gender: 'male'   },
+    { voice_id: 'en-US-TonyNeural',        name: '🇺🇸 Tony — Male (Confident)',               lang: 'en', gender: 'male'   },
+    { voice_id: 'en-US-DavisNeural',       name: '🇺🇸 Davis — Male (Casual)',                 lang: 'en', gender: 'male'   },
+
+    // ── English (UK) ─────────────────────────────────────────────────────
+    { voice_id: 'en-GB-SoniaNeural',    name: '🇬🇧 Sonia — Female (Bright)',        lang: 'en-GB', gender: 'female' },
+    { voice_id: 'en-GB-RyanNeural',     name: '🇬🇧 Ryan — Male (Calm)',             lang: 'en-GB', gender: 'male'   },
+
+    // ── Chinese ──────────────────────────────────────────────────────────
+    { voice_id: 'zh-CN-XiaoxiaoNeural', name: '🇨🇳 Xiaoxiao — 女 (温暖)',          lang: 'zh', gender: 'female' },
+    { voice_id: 'zh-CN-YunxiNeural',    name: '🇨🇳 Yunxi — 男 (阳光)',             lang: 'zh', gender: 'male'   },
+    { voice_id: 'zh-CN-YunyangNeural',  name: '🇨🇳 Yunyang — 男 (专业新闻)',       lang: 'zh', gender: 'male'   },
+
+    // ── Japanese ─────────────────────────────────────────────────────────
+    { voice_id: 'ja-JP-NanamiNeural',   name: '🇯🇵 Nanami — 女性 (Friendly)',      lang: 'ja', gender: 'female' },
+    { voice_id: 'ja-JP-KeitaNeural',    name: '🇯🇵 Keita — 男性 (Friendly)',       lang: 'ja', gender: 'male'   },
+
+    // ── Korean ───────────────────────────────────────────────────────────
+    { voice_id: 'ko-KR-SunHiNeural',    name: '🇰🇷 Sun-Hi — 여성 (Friendly)',      lang: 'ko', gender: 'female' },
+    { voice_id: 'ko-KR-InJoonNeural',   name: '🇰🇷 InJoon — 남성 (Friendly)',      lang: 'ko', gender: 'male'   },
+  ];
+
+  res.json({ voices: EDGE_VOICES });
 });
 
 // Generate Free TTS (Google Translate Proxy)
@@ -220,6 +287,39 @@ app.get('/api/tts-free', async (req, res) => {
   }
 });
 
+// Proxy for AI Images to avoid CORS and SecurityError in WebCodecs
+app.get('/api/scene-image', async (req, res) => {
+  const { prompt } = req.query;
+  if (!prompt) return res.status(400).json({ error: 'Prompt is required' });
+
+  const maxRetries = 3; // Increase to 3 retries
+  const transparentPixel = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+
+  for (let i = 0; i <= maxRetries; i++) {
+    try {
+      // Increase delay between retries: 3s, 6s, 9s
+      if (i > 0) await new Promise(r => setTimeout(r, 3000 * i)); 
+
+      const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1280&height=720&nologo=true&seed=${Math.floor(Math.random() * 1000000)}`;
+      
+      const response = await axios.get(imageUrl, {
+        responseType: 'arraybuffer',
+        timeout: 120000 // 2 minutes timeout as requested
+      });
+
+      res.set('Content-Type', 'image/jpeg');
+      res.set('Cache-Control', 'public, max-age=86400');
+      return res.send(response.data);
+    } catch (err) {
+      console.warn(`Image Proxy Attempt ${i + 1} failed for prompt: "${prompt.substring(0, 30)}..." - Error: ${err.message}`);
+      if (i === maxRetries) {
+        res.set('Content-Type', 'image/gif');
+        return res.send(transparentPixel);
+      }
+    }
+  }
+});
+
 function getJinaKey(req) {
   return req.headers['x-jina-key'] || process.env.JINA_API_KEY;
 }
@@ -244,7 +344,6 @@ app.post('/api/news-to-video', async (req, res) => {
     // Truncate search results to first 15000 chars to stay within reasonable limits
     const searchResults = (searchResponse.data || "").substring(0, 15000);
     
-    // 2. Synthesize news into a video script using Gemini
     const newsPrompt = `
     [ROLE]: You are an elite TV News Producer and a Breaking News Anchor. 
     
@@ -269,6 +368,8 @@ app.post('/api/news-to-video', async (req, res) => {
     - LANGUAGE: Detect the language of the TOPIC "${topic}". You MUST write the entire JSON response natively in that detected language.
     - "textContent": Write this as a "Lower-Third News Ticker". It must be a punchy, authoritative summary of the current scene's main fact. ABSOLUTE MAXIMUM 15 TO 30 WORDS.
     - "narration": Write this for a professional news anchor reading from a teleprompter. Pacing should be 2-5 engaging sentences.
+    - "imagePrompt": Create visually striking, photorealistic image prompts relevant to the textContent. Use English even if the narration is in another language. Max 15 words. This field is MANDATORY for every scene.
+    ${req.body.orientation === 'portrait' ? '- PORTRAIT MODE: This is for TikTok/Shorts. Keep "sceneTitle" to max 4 words. Focus on center-weighted visuals.' : ''}
 
     [OUTPUT]:
     Provide ONLY the valid JSON object following the VIDEO_SYSTEM_PROMPT schema.
@@ -308,6 +409,98 @@ app.post('/api/news-to-video', async (req, res) => {
     const status = err.response?.status || 500;
     res.status(status).json({ 
       error: 'Lỗi săn tin: ' + (err.response?.data?.error?.message || err.message) 
+    });
+  }
+});
+
+// Article URL to Video Pipeline
+app.post('/api/url-to-video', async (req, res) => {
+  const { articleUrl } = req.body;
+  const geminiKey = getGeminiKey(req);
+  const jinaKey = getJinaKey(req);
+
+  if (!articleUrl) return res.status(400).json({ error: 'Vui lòng cung cấp URL bài báo.' });
+  if (!geminiKey) return res.status(401).json({ error: 'Thiếu Gemini API key.' });
+  if (!jinaKey) return res.status(401).json({ error: 'Thiếu Jina API key.' });
+
+  try {
+    // 1. Validate URL
+    try {
+      new URL(articleUrl);
+    } catch (e) {
+      return res.status(400).json({ error: 'URL không hợp lệ. Vui lòng nhập link bắt đầu bằng http:// hoặc https://' });
+    }
+
+    // 2. Scrape article using Jina Reader
+    const scrapeResponse = await axios.get(`https://r.jina.ai/${articleUrl}`, {
+      headers: { 'Authorization': `Bearer ${jinaKey}` },
+      timeout: 20000
+    });
+
+    const scrapedContent = (scrapeResponse.data || "").trim();
+
+    // 3. Anti-Paywall / Content check
+    if (scrapedContent.length < 200) {
+      return res.status(400).json({ error: 'Nội dung bài báo quá ngắn hoặc không thể truy cập (có thể do tường phí hoặc chặn truy cập).' });
+    }
+
+    if (scrapedContent.includes("Enable JavaScript") || scrapedContent.includes("Log in to read")) {
+      return res.status(400).json({ error: 'Không thể đọc được nội dung bài báo. Trang web này có thể yêu cầu đăng nhập hoặc chặn robot.' });
+    }
+
+    // Truncate to save context
+    const truncatedContent = scrapedContent.substring(0, 15000);
+
+    // 4. AI Script Generation
+    const articlePrompt = `
+  [ROLE]: You are an elite TV News Producer.
+  [SOURCE MATERIAL]:
+  ARTICLE URL: "${articleUrl}"
+  ARTICLE CONTENT:
+  ${truncatedContent}
+  
+  [OBJECTIVE & RULES]:
+  Summarize this specific article into a video script. 
+  Extract the 5 Ws (Who, What, When, Where, Why). 
+  Adapt the number of scenes (minimum 3, maximum 6) based on the depth of the ARTICLE CONTENT. 
+  If the content is extremely short, expand contextually using the article's core facts without hallucinating fake data.
+  Follow all tone, formatting, and JSON rules from the system prompt.
+  ${req.body.orientation === 'portrait' ? 'CRITICAL: This is for a PORTRAIT video. Keep "sceneTitle" extremely short (max 4 words).' : ''}
+  `;
+
+    const geminiResponse = await axios.post(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key=${geminiKey}`,
+      {
+        system_instruction: { parts: [{ text: VIDEO_SYSTEM_PROMPT }] },
+        contents: [{ role: 'user', parts: [{ text: articlePrompt }] }],
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 8192,
+          response_mime_type: "application/json"
+        }
+      },
+      { timeout: 45000 }
+    );
+
+    let text = geminiResponse.data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    if (!text) throw new Error('Gemini did not return content.');
+
+    // Clean JSON string
+    text = text.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
+
+    try {
+      const scriptData = JSON.parse(text);
+      res.json(scriptData);
+    } catch (parseErr) {
+      console.error('URL to Video Parse Error:', text);
+      throw new Error('Kịch bản AI không đúng định dạng JSON.');
+    }
+
+  } catch (err) {
+    console.error('URL to Video Error:', err.response?.data || err.message);
+    const status = err.response?.status || 500;
+    res.status(status).json({ 
+      error: 'Lỗi xử lý link bài báo: ' + (err.response?.data?.error?.message || err.message) 
     });
   }
 });

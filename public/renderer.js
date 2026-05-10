@@ -77,7 +77,10 @@ class VideoRenderer {
   // ── Particle System ───────────────────────────────────────────────────────
   initParticles() {
     this.particles = [];
-    for (let i = 0; i < 80; i++) {
+    const count = Math.round(80 * (this.W * this.H) / (1280 * 720));
+    const finalCount = Math.max(40, Math.min(150, count));
+    
+    for (let i = 0; i < finalCount; i++) {
       this.particles.push({
         x: Math.random() * this.W,
         y: Math.random() * this.H,
@@ -120,10 +123,13 @@ class VideoRenderer {
   drawBackground(theme, accentColor, t) {
     const ctx = this.ctx;
     const stops = this.THEMES[theme] || this.THEMES.minimal;
+    const rX = (px) => px / 1280 * this.W;
+    const rY = (px) => px / 720  * this.H;
+    const rMin = (px) => px / 720 * Math.min(this.W, this.H);
 
     // Animated radial gradient center
-    const cx = this.W * 0.5 + Math.sin(t * 0.3) * 80;
-    const cy = this.H * 0.5 + Math.cos(t * 0.2) * 40;
+    const cx = this.W * 0.5 + Math.sin(t * 0.3) * rX(80);
+    const cy = this.H * 0.5 + Math.cos(t * 0.2) * rY(40);
 
     const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, this.H * 0.9);
     for (const s of stops) {
@@ -133,7 +139,7 @@ class VideoRenderer {
     ctx.fillRect(0, 0, this.W, this.H);
 
     // Subtle accent radial bloom
-    const bloom = ctx.createRadialGradient(cx, cy, 0, cx, cy, 420);
+    const bloom = ctx.createRadialGradient(cx, cy, 0, cx, cy, rMin(420));
     bloom.addColorStop(0, accentColor + '18');
     bloom.addColorStop(1, 'transparent');
     ctx.fillStyle = bloom;
@@ -144,7 +150,7 @@ class VideoRenderer {
     ctx.globalAlpha = 0.03;
     ctx.strokeStyle = accentColor;
     ctx.lineWidth = 1;
-    const gridSpacing = 80;
+    const gridSpacing = rMin(80);
     for (let x = 0; x < this.W; x += gridSpacing) {
       ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, this.H); ctx.stroke();
     }
@@ -161,14 +167,44 @@ class VideoRenderer {
     ctx.fillRect(0, 0, this.W, this.H);
   }
 
+  // ── Image Rendering ───────────────────────────────────────────────────────
+  /**
+   * Draws an image to fill the canvas using "cover" logic (no distortion).
+   */
+  drawImageCover(img) {
+    const ctx = this.ctx;
+    const canvasRatio = this.W / this.H;
+    const imgRatio = img.width / img.height;
+
+    let drawW, drawH, offsetX, offsetY;
+
+    if (imgRatio > canvasRatio) {
+      drawH = this.H;
+      drawW = img.width * (this.H / img.height);
+      offsetX = (this.W - drawW) / 2;
+      offsetY = 0;
+    } else {
+      drawW = this.W;
+      drawH = img.height * (this.W / img.width);
+      offsetX = 0;
+      offsetY = (this.H - drawH) / 2;
+    }
+
+    ctx.drawImage(img, offsetX, offsetY, drawW, drawH);
+  }
+
   // ── Decorative Elements ───────────────────────────────────────────────────
   drawDecorativeLines(accentColor, alpha, t) {
     const ctx = this.ctx;
+    const rX = (px) => px / 1280 * this.W;
+    const rY = (px) => px / 720  * this.H;
+    const rMin = (px) => px / 720 * Math.min(this.W, this.H);
+
     ctx.save();
 
     // Center horizontal accent line
-    const lineY = this.H * 0.5 + 60;
-    const lineW = 280 * alpha;
+    const lineY = this.H * 0.5 + rY(60);
+    const lineW = rX(280) * alpha;
     ctx.globalAlpha = alpha * 0.9;
     ctx.strokeStyle = accentColor;
     ctx.lineWidth = 2;
@@ -177,14 +213,14 @@ class VideoRenderer {
 
     // Left line
     ctx.beginPath();
-    ctx.moveTo(this.W/2 - lineW - 20, lineY);
-    ctx.lineTo(this.W/2 - 20, lineY);
+    ctx.moveTo(this.W/2 - lineW - rX(20), lineY);
+    ctx.lineTo(this.W/2 - rX(20), lineY);
     ctx.stroke();
 
     // Right line
     ctx.beginPath();
-    ctx.moveTo(this.W/2 + 20, lineY);
-    ctx.lineTo(this.W/2 + lineW + 20, lineY);
+    ctx.moveTo(this.W/2 + rX(20), lineY);
+    ctx.lineTo(this.W/2 + lineW + rX(20), lineY);
     ctx.stroke();
 
     // Center dot
@@ -195,17 +231,19 @@ class VideoRenderer {
     ctx.fill();
 
     // Corner accents
-    const cSize = 30 * alpha;
+    const cSize = rMin(30) * alpha;
+    const paddingX = rX(40);
+    const paddingY = rY(40);
     ctx.lineWidth = 2;
     ctx.globalAlpha = alpha * 0.4;
     // top-left
-    ctx.beginPath(); ctx.moveTo(40, 40 + cSize); ctx.lineTo(40, 40); ctx.lineTo(40 + cSize, 40); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(paddingX, paddingY + cSize); ctx.lineTo(paddingX, paddingY); ctx.lineTo(paddingX + cSize, paddingY); ctx.stroke();
     // top-right
-    ctx.beginPath(); ctx.moveTo(this.W-40-cSize, 40); ctx.lineTo(this.W-40, 40); ctx.lineTo(this.W-40, 40+cSize); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(this.W-paddingX-cSize, paddingY); ctx.lineTo(this.W-paddingX, paddingY); ctx.lineTo(this.W-paddingX, paddingY+cSize); ctx.stroke();
     // bottom-left
-    ctx.beginPath(); ctx.moveTo(40, this.H-40-cSize); ctx.lineTo(40, this.H-40); ctx.lineTo(40+cSize, this.H-40); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(paddingX, this.H-paddingY-cSize); ctx.lineTo(paddingX, this.H-paddingY); ctx.lineTo(paddingX+cSize, this.H-paddingY); ctx.stroke();
     // bottom-right
-    ctx.beginPath(); ctx.moveTo(this.W-40-cSize, this.H-40); ctx.lineTo(this.W-40, this.H-40); ctx.lineTo(this.W-40, this.H-40-cSize); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(this.W-paddingX-cSize, this.H-paddingY); ctx.lineTo(this.W-paddingX, this.H-paddingY); ctx.lineTo(this.W-paddingX, this.H-paddingY-cSize); ctx.stroke();
 
     ctx.restore();
   }
@@ -213,10 +251,13 @@ class VideoRenderer {
   // ── Text Rendering ────────────────────────────────────────────────────────
   drawTitle(text, animStyle, progress, accentColor, renderMode = 'default', timestamp = 0) {
     const ctx = this.ctx;
+    const rX = (px) => px / 1280 * this.W;
+    const rY = (px) => px / 720  * this.H;
+    const rMin = (px) => px / 720 * Math.min(this.W, this.H);
     
     // Anchor to Top-Left
-    const originX = 60;
-    const originY = 80;
+    const originX = rX(60);
+    const originY = rY(80);
 
     let x = originX, y = originY;
     let alpha = 1, scale = 1, blur = 0;
@@ -226,11 +267,11 @@ class VideoRenderer {
 
     switch (animStyle) {
       case 'slide-up':
-        y = originY + (1 - ease) * 40; // Reduced offset for top-left
+        y = originY + (1 - ease) * rY(40);
         alpha = ease;
         break;
       case 'slide-left':
-        x = originX + (1 - ease) * 60;
+        x = originX + (1 - ease) * rX(60);
         alpha = ease;
         break;
       case 'zoom-in':
@@ -239,7 +280,7 @@ class VideoRenderer {
         break;
       case 'fade-in':
         alpha = ease;
-        blur = (1 - ease) * 6;
+        blur = (1 - ease) * rMin(6);
         break;
       case 'typewriter':
         charProgress = Math.min(progress * 3, 1);
@@ -247,7 +288,7 @@ class VideoRenderer {
         break;
       default:
         alpha = ease;
-        y = originY + (1 - ease) * 30;
+        y = originY + (1 - ease) * rY(30);
     }
 
     ctx.save();
@@ -259,9 +300,9 @@ class VideoRenderer {
     // Glow shadow
     if (renderMode !== 'hand-drawn') {
       ctx.shadowColor = accentColor;
-      ctx.shadowBlur = 20;
+      ctx.shadowBlur = rMin(20);
       if (renderMode === 'neon') {
-        ctx.shadowBlur = 25 + Math.sin(timestamp / 400) * 8;
+        ctx.shadowBlur = rMin(25) + Math.sin(timestamp / 400) * rMin(8);
       }
     }
 
@@ -270,8 +311,8 @@ class VideoRenderer {
       displayText = text.slice(0, Math.floor(charProgress * text.length));
     }
 
-    // Title font (Slightly smaller for Top-Left)
-    const fontSize = this.calcFontSize(text, 56, this.W - 160);
+    // Title font
+    const fontSize = this.calcFontSize(text, Math.round(rMin(56)), this.W - rX(160));
     if (renderMode === 'hand-drawn') {
       ctx.font = `800 ${fontSize}px 'Comic Sans MS', cursive`;
     } else {
@@ -280,7 +321,7 @@ class VideoRenderer {
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
 
-    const textGrad = ctx.createLinearGradient(0, 0, 300, 0);
+    const textGrad = ctx.createLinearGradient(0, 0, rX(300), 0);
     textGrad.addColorStop(0, '#ffffff');
     textGrad.addColorStop(1, accentColor);
     ctx.fillStyle = textGrad;
@@ -290,7 +331,7 @@ class VideoRenderer {
     if (animStyle === 'typewriter' && charProgress < 1) {
       const tw = ctx.measureText(displayText).width;
       ctx.fillStyle = accentColor;
-      ctx.fillRect(tw + 4, 0, 3, fontSize);
+      ctx.fillRect(tw + rX(4), 0, rX(3), fontSize);
     }
 
     ctx.restore();
@@ -299,26 +340,29 @@ class VideoRenderer {
   drawTextContent(text, animStyle, progress, accentColor, renderMode, timestamp) {
     if (!text) return;
     const ctx = this.ctx;
+    const rX = (px) => px / 1280 * this.W;
+    const rY = (px) => px / 720  * this.H;
+    const rMin = (px) => px / 720 * Math.min(this.W, this.H);
     
     // Slight delay and smoother entry than title
     const ease = this.easeOutQuart(Math.min(progress * 1.2, 1));
     const alpha = ease;
-    const yOffset = (1 - ease) * 20;
+    const yOffset = (1 - ease) * rY(20);
     
-    const x = 60;
-    const y = 160 + yOffset; 
+    const x = rX(60);
+    const y = rY(160) + yOffset; 
     
     ctx.save();
     ctx.globalAlpha = alpha;
     
-    const fontSize = 24;
+    const fontSize = Math.max(Math.round(rMin(24)), 14);
     ctx.font = `400 ${fontSize}px 'Inter', system-ui, sans-serif`;
     ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     
     // Wrap and draw
-    this.wrapText(ctx, text, x, y, this.W - 120, fontSize * 1.5);
+    this.wrapText(ctx, text, x, y, this.W - rX(120), fontSize * 1.5);
     
     ctx.restore();
   }
@@ -352,7 +396,10 @@ class VideoRenderer {
   calcFontSize(text, maxSize, maxWidth) {
     let size = maxSize;
     const ctx = this.ctx;
-    while (size > 32) {
+    const rMin = (px) => px / 720 * Math.min(this.W, this.H);
+    const minSize = Math.max(Math.round(rMin(32)), 16);
+
+    while (size > minSize) {
       ctx.font = `800 ${size}px 'Space Grotesk', system-ui, sans-serif`;
       if (ctx.measureText(text).width <= maxWidth) break;
       size -= 4;
@@ -362,21 +409,26 @@ class VideoRenderer {
 
   drawSceneNumber(idx, total, accentColor, alpha) {
     const ctx = this.ctx;
+    const rX = (px) => px / 1280 * this.W;
+    const rY = (px) => px / 720  * this.H;
+    const rMin = (px) => px / 720 * Math.min(this.W, this.H);
+
     ctx.save();
     ctx.globalAlpha = alpha * 0.7;
-    ctx.font = '600 14px Inter, sans-serif';
+    ctx.font = `600 ${Math.max(Math.round(rMin(14)), 10)}px Inter, sans-serif`;
     ctx.textAlign = 'right';
     ctx.textBaseline = 'top';
     ctx.fillStyle = accentColor;
     ctx.shadowColor = accentColor;
-    ctx.shadowBlur = 8;
-    ctx.fillText(`${idx + 1} / ${total}`, this.W - 40, 40);
+    ctx.shadowBlur = rMin(8);
+    ctx.fillText(`${idx + 1} / ${total}`, this.W - rX(40), rY(40));
     ctx.restore();
   }
 
   drawProgressBar(progress, accentColor) {
     const ctx = this.ctx;
-    const barH = 3;
+    const rMin = (px) => px / 720 * Math.min(this.W, this.H);
+    const barH = rMin(3);
     const barY = this.H - barH;
 
     ctx.save();
@@ -395,10 +447,10 @@ class VideoRenderer {
     // Glow dot at end
     if (fillW > 4) {
       ctx.beginPath();
-      ctx.arc(fillW, barY + barH/2, 4, 0, Math.PI * 2);
+      ctx.arc(fillW, barY + barH/2, rMin(4), 0, Math.PI * 2);
       ctx.fillStyle = accentColor;
       ctx.shadowColor = accentColor;
-      ctx.shadowBlur = 10;
+      ctx.shadowBlur = rMin(10);
       ctx.fill();
     }
     ctx.restore();
@@ -407,13 +459,17 @@ class VideoRenderer {
   drawVideoTitle(title, alpha) {
     if (!title) return;
     const ctx = this.ctx;
+    const rX = (px) => px / 1280 * this.W;
+    const rY = (px) => px / 720  * this.H;
+    const rMin = (px) => px / 720 * Math.min(this.W, this.H);
+
     ctx.save();
     ctx.globalAlpha = alpha * 0.6;
-    ctx.font = '500 15px Inter, sans-serif';
+    ctx.font = `500 ${Math.max(Math.round(rMin(15)), 10)}px Inter, sans-serif`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillStyle = '#ffffff';
-    ctx.fillText(title, 40, 36);
+    ctx.fillText(title, rX(40), rY(36));
     ctx.restore();
   }
 
@@ -429,6 +485,7 @@ class VideoRenderer {
   // ── Idle Screen ───────────────────────────────────────────────────────────
   drawIdleScreen() {
     const ctx = this.ctx;
+    const rMin = (px) => px / 720 * Math.min(this.W, this.H);
     ctx.clearRect(0, 0, this.W, this.H);
 
     // Background
@@ -443,10 +500,11 @@ class VideoRenderer {
     ctx.globalAlpha = 0.04;
     ctx.strokeStyle = '#747689';
     ctx.lineWidth = 1;
-    for (let x = 0; x < this.W; x += 80) {
+    const gridSpacing = rMin(80);
+    for (let x = 0; x < this.W; x += gridSpacing) {
       ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, this.H); ctx.stroke();
     }
-    for (let y = 0; y < this.H; y += 80) {
+    for (let y = 0; y < this.H; y += gridSpacing) {
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(this.W, y); ctx.stroke();
     }
     ctx.restore();
@@ -455,16 +513,16 @@ class VideoRenderer {
     ctx.save();
     ctx.globalAlpha = 0.12;
     ctx.beginPath();
-    ctx.arc(this.W/2, this.H/2, 120, 0, Math.PI * 2);
+    ctx.arc(this.W/2, this.H/2, rMin(120), 0, Math.PI * 2);
     ctx.strokeStyle = '#747689';
     ctx.lineWidth = 1;
     ctx.stroke();
     ctx.beginPath();
-    ctx.arc(this.W/2, this.H/2, 80, 0, Math.PI * 2);
+    ctx.arc(this.W/2, this.H/2, rMin(80), 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
 
-    ctx.font = '700 26px Space Grotesk, sans-serif';
+    ctx.font = `700 ${Math.round(rMin(26))}px Space Grotesk, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = 'rgba(255,255,255,0.08)';
@@ -572,7 +630,18 @@ class VideoRenderer {
     }
 
     // Draw
-    this.drawBackground(theme, accent, this.globalTime);
+    if (scene.loadedImage) {
+      this.drawImageCover(scene.loadedImage);
+      
+      // Critical: Dark gradient overlay for typography readability
+      const grad = ctx.createLinearGradient(0, 0, 0, this.H);
+      grad.addColorStop(0, 'rgba(0,0,0,0.4)');
+      grad.addColorStop(1, 'rgba(0,0,0,0.7)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, this.W, this.H);
+    } else {
+      this.drawBackground(theme, accent, this.globalTime);
+    }
     this.drawParticles(accent);
     this.drawDecorativeLines(accent, Math.min(enterProgress * 1.5, 1) * (1 - exitProgress * 2), this.globalTime);
     this.drawTitle(scene.sceneTitle, animStyle, enterProgress * (1 - exitProgress), accent, renderMode, now);
@@ -763,69 +832,38 @@ window.VideoRenderer = VideoRenderer;
 
 class VisualElementRenderer {
   static resolvePosition(positionString, canvasWidth, canvasHeight, elementType = 'default') {
-    // Charts are 320px wide — require larger right padding
-    const chartRightX = canvasWidth - 370;
-    const chartCenterX = (canvasWidth - 320) / 2;
+    const rX = (px) => Math.round(px / 1280 * canvasWidth);
+    const rY = (px) => Math.round(px / 720  * canvasHeight);
 
-    // Safe Y coordinates — all elements must begin below this region
-    // Title occupies y: 260–420 (centerY±60px + decorative line + glow)
-    // Tallest chart height: 180px → y_start = canvasHeight - 210 = 510 → ends at 690 ✓
-    const Y_BOTTOM_CHART   = canvasHeight - 210;
-    const Y_BOTTOM_DEFAULT = canvasHeight - 200;
-
-    const yBottom = elementType === 'chart'
-      ? Y_BOTTOM_CHART
-      : Y_BOTTOM_DEFAULT;
+    const chartRightX    = canvasWidth  - rX(370);
+    const chartCenterX   = (canvasWidth - rX(320)) / 2;
+    const Y_BOTTOM_CHART   = canvasHeight - rY(210);
+    const Y_BOTTOM_DEFAULT = canvasHeight - rY(200);
+    const yBottom = elementType === 'chart' ? Y_BOTTOM_CHART : Y_BOTTOM_DEFAULT;
 
     switch (positionString) {
-      case 'bottom-left':
-        return { x: 40, y: yBottom };
-
-      case 'bottom-center':
-        return { x: chartCenterX, y: yBottom };
-
-      case 'bottom-right':
-        // Charts require an extra 40px right padding
-        return {
-          x: elementType === 'chart'
-            ? chartRightX
-            : canvasWidth - 360,
-          y: yBottom
-        };
-
-      // center-left and center-right are forbidden because they overlap the title zone (y=260–420)
-      // Redirect them to bottom positions instead of crashing
-      case 'center-left':
-        return { x: 40, y: yBottom };
-
-      case 'center-right':
-        return {
-          x: elementType === 'chart'
-            ? chartRightX
-            : canvasWidth - 360,
-          y: yBottom
-        };
-
-      default:
-        return { x: 40, y: yBottom };
+      case 'bottom-left':   return { x: rX(40),  y: yBottom };
+      case 'bottom-center': return { x: chartCenterX, y: yBottom };
+      case 'bottom-right':  return { x: elementType === 'chart' ? chartRightX : canvasWidth - rX(360), y: yBottom };
+      case 'center-left':   return { x: rX(40),  y: yBottom };
+      case 'center-right':  return { x: elementType === 'chart' ? chartRightX : canvasWidth - rX(360), y: yBottom };
+      default:              return { x: rX(40),  y: yBottom };
     }
   }
 
   static draw(ctx, element, sceneProgress, accentColor, position) {
-    // ── GUARD: Force Y into safe zone to avoid title overlap ────────────
-    // Title occupies y: 260–420 on a 720px canvas
-    // Preserve proportional layout: safe_y = canvasHeight - 220 (≈ y >= 500)
     const canvasHeight = ctx.canvas.height;
-    const MIN_SAFE_Y = canvasHeight - 220;
+    const canvasWidth = ctx.canvas.width;
+    const rX = (px) => Math.round(px / 1280 * canvasWidth);
+    const rY = (px) => Math.round(px / 720 * canvasHeight);
+    const rMin = (px) => px / 720 * Math.min(canvasWidth, canvasHeight);
+    const rFontY = (px) => Math.max(Math.round(px / 720 * canvasHeight), 9);
+
+    const MIN_SAFE_Y = canvasHeight - rY(220);
 
     if (position.y < MIN_SAFE_Y) {
-      console.warn(
-        `[VisualElementRenderer] position.y=${position.y} violates safe zone (min=${MIN_SAFE_Y}). Auto-correcting.`
-      );
-
       position.y = MIN_SAFE_Y;
     }
-    // ────────────────────────────────────────────────────────────────────
 
     const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
     const alpha = Math.min(1, sceneProgress * 4);
@@ -836,24 +874,28 @@ class VisualElementRenderer {
     ctx.globalAlpha = alpha;
 
     if (element.type === 'stat-counter') {
+      const cardW = rX(260);
+      const cardH = rY(120);
+      const borderRadius = rFontY(12);
+
       // Background
       ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
       ctx.beginPath();
-      ctx.roundRect(0, 0, 260, 120, 12);
+      ctx.roundRect(0, 0, cardW, cardH, borderRadius);
       ctx.fill();
 
       // Left border
       ctx.fillStyle = accentColor;
       ctx.beginPath();
-      ctx.roundRect(0, 0, 4, 120, { tl: 12, bl: 12, tr: 0, br: 0 });
+      ctx.roundRect(0, 0, rX(4), cardH, { tl: borderRadius, bl: borderRadius, tr: 0, br: 0 });
       ctx.fill();
 
       // Top label
       ctx.fillStyle = 'rgba(255,255,255,0.6)';
-      ctx.font = '14px Inter, sans-serif';
+      ctx.font = `${rFontY(14)}px Inter, sans-serif`;
       ctx.textBaseline = 'top';
       ctx.textAlign = 'left';
-      ctx.fillText((element.label || '').toUpperCase(), 20, 20);
+      ctx.fillText((element.label || '').toUpperCase(), rX(20), rY(20));
 
       // Animated number
       const targetVal = element.value || 0;
@@ -863,13 +905,17 @@ class VisualElementRenderer {
       const formatted = currentVal.toLocaleString('en-US');
 
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 42px Inter, sans-serif';
-      ctx.fillText(`${prefix}${formatted}${suffix}`, 20, 50);
+      ctx.font = `bold ${rFontY(42)}px Inter, sans-serif`;
+      ctx.fillText(`${prefix}${formatted}${suffix}`, rX(20), rY(50));
 
     } else if (element.type === 'progress-bar') {
+      const trackW = rX(280);
+      const trackH = rY(10);
+      const trackY = rY(30);
+
       // Top label
       ctx.fillStyle = 'rgba(255,255,255,0.6)';
-      ctx.font = '13px Inter, sans-serif';
+      ctx.font = `${rFontY(13)}px Inter, sans-serif`;
       ctx.textBaseline = 'top';
       ctx.textAlign = 'left';
       ctx.fillText((element.label || '').toUpperCase(), 0, 0);
@@ -877,13 +923,13 @@ class VisualElementRenderer {
       // Track background
       ctx.fillStyle = 'rgba(255,255,255,0.1)';
       ctx.beginPath();
-      ctx.roundRect(0, 30, 280, 10, 5);
+      ctx.roundRect(0, trackY, trackW, trackH, rY(5));
       ctx.fill();
 
       // Fill bar
       const targetPct = Math.min(Math.max(element.percent || 0, 0), 100);
       const currentPct = targetPct * easeOutCubic(sceneProgress);
-      const fillWidth = 280 * (currentPct / 100);
+      const fillWidth = trackW * (currentPct / 100);
 
       if (fillWidth > 0) {
         const grad = ctx.createLinearGradient(0, 0, fillWidth, 0);
@@ -892,36 +938,37 @@ class VisualElementRenderer {
         
         ctx.fillStyle = grad;
         ctx.beginPath();
-        ctx.roundRect(0, 30, fillWidth, 10, 5);
+        ctx.roundRect(0, trackY, fillWidth, trackH, rY(5));
         ctx.fill();
 
         // Moving dot
         ctx.fillStyle = accentColor;
         ctx.shadowColor = accentColor;
-        ctx.shadowBlur = 10;
+        ctx.shadowBlur = rFontY(10);
         ctx.beginPath();
-        ctx.arc(fillWidth, 35, 6, 0, Math.PI * 2);
+        ctx.arc(fillWidth, trackY + trackH/2, rFontY(6), 0, Math.PI * 2);
         ctx.fill();
         ctx.shadowBlur = 0; // reset
       }
 
       // Percentage text
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 16px Inter, sans-serif';
+      ctx.font = `bold ${rFontY(16)}px Inter, sans-serif`;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
-      ctx.fillText(`${Math.floor(currentPct)}%`, 290, 35);
+      ctx.fillText(`${Math.floor(currentPct)}%`, trackW + rX(10), trackY + trackH/2);
 
     } else if (element.type === 'chart') {
       const data = element.data || [];
       const dataCount = data.length;
-      const chartWidth = 320;
-      const chartHeight = 180;
-      const bottomY = chartHeight - 20;
+      const chartWidth = rX(320);
+      const chartHeight = rY(180);
+      const bottomY = chartHeight - rY(20);
+      const xAxisY = rY(30);
 
       // Title
       ctx.fillStyle = 'rgba(255,255,255,0.6)';
-      ctx.font = '13px Inter, sans-serif';
+      ctx.font = `${rFontY(13)}px Inter, sans-serif`;
       ctx.textBaseline = 'top';
       ctx.textAlign = 'left';
       ctx.fillText((element.label || ''), 0, 0);
@@ -930,7 +977,7 @@ class VisualElementRenderer {
       ctx.strokeStyle = 'rgba(255,255,255,0.1)';
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(0, 30);
+      ctx.moveTo(0, xAxisY);
       ctx.lineTo(0, bottomY);
       ctx.stroke();
 
@@ -942,10 +989,10 @@ class VisualElementRenderer {
 
       if (dataCount > 0) {
         const maxValue = Math.max(...data.map(d => d.value || 0), 1);
-        const maxBarHeight = chartHeight - 60;
-        const gap = 10;
+        const maxBarHeight = chartHeight - rY(60);
+        const gap = rX(10);
         const totalGap = gap * (dataCount + 1);
-        const barWidth = Math.max(2, (chartWidth - totalGap) / dataCount);
+        const barWidth = Math.max(rX(2), (chartWidth - totalGap) / dataCount);
 
         if (element.chartType === 'line') {
            const points = [];
@@ -956,9 +1003,9 @@ class VisualElementRenderer {
              points.push({ x, y: targetY });
 
              ctx.fillStyle = '#ffffff';
-             ctx.font = '12px Inter, sans-serif';
+             ctx.font = `${rFontY(12)}px Inter, sans-serif`;
              ctx.textAlign = 'center';
-             ctx.fillText(data[i].label || '', x, bottomY + 10);
+             ctx.fillText(data[i].label || '', x, bottomY + rY(10));
            }
            
            const drawProgressX = chartWidth * easeOutCubic(sceneProgress);
@@ -967,17 +1014,6 @@ class VisualElementRenderer {
            ctx.beginPath();
            ctx.rect(0, 0, drawProgressX, chartHeight);
            ctx.clip();
-
-           ctx.beginPath();
-           ctx.moveTo(points[0].x, bottomY);
-           for (let i = 0; i < dataCount; i++) ctx.lineTo(points[i].x, points[i].y);
-           ctx.lineTo(points[dataCount-1].x, bottomY);
-           ctx.closePath();
-           const areaGrad = ctx.createLinearGradient(0, 30, 0, bottomY);
-           areaGrad.addColorStop(0, accentColor + '4d');
-           areaGrad.addColorStop(1, 'transparent');
-           ctx.fillStyle = areaGrad;
-           ctx.fill();
 
            ctx.beginPath();
            ctx.moveTo(points[0].x, points[0].y);
@@ -989,13 +1025,13 @@ class VisualElementRenderer {
            ctx.fillStyle = accentColor;
            for (let i = 0; i < dataCount; i++) {
              ctx.beginPath();
-             ctx.arc(points[i].x, points[i].y, 4, 0, Math.PI * 2);
+             ctx.arc(points[i].x, points[i].y, rMin(4), 0, Math.PI * 2);
              ctx.fill();
            }
 
            ctx.restore();
 
-        } else {
+         } else {
            for (let i = 0; i < dataCount; i++) {
              const val = data[i].value || 0;
              const currentVal = val * easeOutCubic(sceneProgress);
@@ -1005,26 +1041,27 @@ class VisualElementRenderer {
 
              ctx.fillStyle = accentColor + 'cc';
              ctx.beginPath();
-             ctx.roundRect(x, y, barWidth, h, { tl: 4, tr: 4, bl: 0, br: 0 });
+             ctx.roundRect(x, y, barWidth, h, { tl: rMin(4), tr: rMin(4), bl: 0, br: 0 });
              ctx.fill();
 
              ctx.fillStyle = '#ffffff';
-             ctx.font = '12px Inter, sans-serif';
+             ctx.font = `${rFontY(12)}px Inter, sans-serif`;
              ctx.textAlign = 'center';
-             ctx.fillText(data[i].label || '', x + barWidth/2, bottomY + 10);
+             ctx.fillText(data[i].label || '', x + barWidth/2, bottomY + rY(10));
 
              if (sceneProgress > 0.7) {
                 ctx.globalAlpha = alpha * ((sceneProgress - 0.7) / 0.3);
-                ctx.font = '11px Inter, sans-serif';
-                ctx.fillText(Math.floor(currentVal), x + barWidth/2, y - 15);
+                ctx.font = `${rFontY(11)}px Inter, sans-serif`;
+                ctx.fillText(Math.floor(currentVal), x + barWidth/2, y - rY(15));
                 ctx.globalAlpha = alpha;
              }
            }
-        }
+         }
       }
     }
 
     ctx.restore();
   }
 }
+
 

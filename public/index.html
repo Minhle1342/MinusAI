@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="vi">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -11,291 +12,362 @@
   <!-- WebM Muxer for Offline Video Export -->
   <script src="https://unpkg.com/webm-muxer/build/webm-muxer.js"></script>
 </head>
+
 <body>
-<div class="app-wrapper">
+  <div class="app-wrapper">
 
-  <!-- ══ HEADER ══════════════════════════════════════════════════════════════ -->
-  <header class="header">
-    <div class="header-inner">
-      <a href="#" class="logo">
-        <div class="logo-icon">
-          <i data-lucide="video" style="width:18px;height:18px;"></i>
+    <!-- ══ HEADER ══════════════════════════════════════════════════════════════ -->
+    <header class="header">
+      <div class="header-inner">
+        <a href="#" class="logo">
+          <div class="logo-icon">
+            <i data-lucide="video" style="width:18px;height:18px;"></i>
+          </div>
+          <span data-i18n="app_title">Công cụ tạo video bằng</span><span
+            style="color: #a855f7; font-weight: 900;">AI</span>
+        </a>
+        <div class="header-actions">
+          <div class="lang-switcher">
+            <button class="lang-btn active" data-lang="vi" title="Tiếng Việt">VI</button>
+            <button class="lang-btn" data-lang="en" title="English">EN</button>
+          </div>
+          <button class="btn btn-secondary btn-icon" id="settingsBtn" data-tooltip="Cài đặt API">
+            <i data-lucide="settings-2" style="width:16px;height:16px;"></i>
+          </button>
         </div>
-        Công cụ tạo video bằng<span style="color: #a855f7; font-weight: 900;">AI</span>
-      </a>
-      <div class="header-actions">
-        <button class="btn btn-secondary btn-icon" id="settingsBtn" data-tooltip="Cài đặt API">
-          <i data-lucide="settings-2" style="width:16px;height:16px;"></i>
-        </button>
       </div>
-    </div>
-  </header>
+    </header>
 
-  <!-- ══ MAIN ════════════════════════════════════════════════════════════════ -->
-  <main class="main-content">
+    <!-- ══ MAIN ════════════════════════════════════════════════════════════════ -->
+    <main class="main-content">
 
-    <!-- ── LEFT PANEL ────────────────────────────────────────────────────── -->
-    <aside style="display:flex;flex-direction:column;gap:1.5rem;">
+      <!-- ── LEFT PANEL ────────────────────────────────────────────────────── -->
+      <aside style="display:flex;flex-direction:column;gap:1.5rem;">
 
-      <!-- Generate Script Panel -->
-      <div class="panel" id="generatePanel">
-        <div class="panel-header">
-          <div class="panel-title">
-            <i data-lucide="sparkles" style="width:16px;height:16px;"></i>
-            Tạo Video AI
-          </div>
-        </div>
-        <div class="panel-body">
-          <!-- Mode Tabs -->
-          <div class="mode-tabs">
-            <button class="mode-tab active" data-mode="standard">
-              <i data-lucide="edit-3"></i> Tự soạn
-            </button>
-            <button class="mode-tab" data-mode="news">
-              <i data-lucide="newspaper"></i> Săn tin tức
-            </button>
-          </div>
-
-          <!-- Standard Mode -->
-          <div id="mode-standard" class="mode-content active">
-            <div class="form-group">
-              <label class="form-label" for="videoPrompt">
-                <i data-lucide="message-square" style="width:13px;height:13px;"></i>
-                Nội dung video bạn muốn tạo
-              </label>
-              <textarea
-                id="videoPrompt"
-                class="form-textarea"
-                rows="4"
-                placeholder="VD: Tạo video giới thiệu về trí tuệ nhân tạo..."
-              ></textarea>
+        <!-- Generate Script Panel -->
+        <div class="panel" id="generatePanel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <i data-lucide="sparkles" style="width:16px;height:16px;"></i>
+              <span data-i18n="panel_title">Tạo Video AI</span>
             </div>
-
-            <div class="form-group">
-              <label class="form-label" for="videoStyle">
-                <i data-lucide="palette" style="width:13px;height:13px;"></i>
-                Phong cách video
+          </div>
+          <div class="panel-body">
+            <!-- Mode Tabs -->
+            <!-- Global Video Orientation Selector -->
+            <div class="form-group" style="padding: 0 1.5rem; margin-top: 1.5rem;">
+              <label class="form-label">
+                <i data-lucide="monitor" style="width:13px;height:13px;"></i>
+                Định dạng video (Áp dụng cho mọi chế độ)
               </label>
-              <select id="videoStyle" class="form-select">
-                <option value="">Để AI tự chọn</option>
-                <option value="cinematic">Cinematic — Điện ảnh</option>
-                <option value="educational">Educational — Giáo dục</option>
-                <option value="promotional">Promotional — Quảng bá</option>
-                <option value="documentary">Documentary — Tài liệu</option>
-                <option value="motivational">Motivational — Truyền cảm hứng</option>
-              </select>
-            </div>
-
-            <div class="form-group" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border);">
-              <div style="display: flex; justify-content: space-between; align-items: center;">
-                <label class="form-label" for="scene-count-slider" style="margin-bottom: 0;">
-                  <i data-lucide="layers" style="width:13px;height:13px;"></i>
-                  Số khung hình (Scenes)
-                </label>
-                <span id="scene-count-display" class="scene-count-badge">6</span>
+              <div class="orientation-selector" id="orientationSelector">
+                <button class="orientation-btn active" data-orientation="landscape" id="btnLandscape">
+                  <span class="orientation-icon">
+                    <svg width="32" height="20" viewBox="0 0 32 20" fill="none">
+                      <rect x="1" y="1" width="30" height="18" rx="2" stroke="currentColor" stroke-width="1.5"/>
+                      <line x1="8" y1="6" x2="24" y2="6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                      <line x1="8" y1="10" x2="20" y2="10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                    </svg>
+                  </span>
+                  <span class="orientation-label">Ngang 16:9</span>
+                  <span class="orientation-res">1920 × 1080</span>
+                </button>
+                <button class="orientation-btn" data-orientation="portrait" id="btnPortrait">
+                  <span class="orientation-icon">
+                    <svg width="20" height="32" viewBox="0 0 20 32" fill="none">
+                      <rect x="1" y="1" width="18" height="30" rx="2" stroke="currentColor" stroke-width="1.5"/>
+                      <line x1="5" y1="8" x2="15" y2="8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                      <line x1="5" y1="12" x2="13" y2="12" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                    </svg>
+                  </span>
+                  <span class="orientation-label">Dọc 9:16</span>
+                  <span class="orientation-res">1080 × 1920</span>
+                </button>
               </div>
-              <input
-                type="range"
-                id="scene-count-slider"
-                min="1"
-                max="30"
-                value="6"
-                step="1"
-                class="scene-count-slider"
-              />
             </div>
 
-            <button class="btn btn-primary btn-full" id="generateScriptBtn" onclick="handleGenerate()">
-              <i data-lucide="wand-2" style="width:15px;height:15px;"></i>
-              Tạo video ngay
-            </button>
-          </div>
-
-          <!-- News Hunter Mode -->
-          <div id="mode-news" class="mode-content">
-            <div class="form-group">
-              <label class="form-label" for="newsTopicInput">
-                <i data-lucide="search" style="width:13px;height:13px;"></i>
-                Chủ đề tin tức muốn săn
-              </label>
-              <input
-                type="text"
-                id="newsTopicInput"
-                class="form-input"
-                placeholder="VD: Đột phá AI mới nhất, Thị trường chứng khoán..."
-              />
+            <div class="mode-tabs">
+              <button class="mode-tab active" data-mode="standard" data-i18n="tab_standard">
+                <i data-lucide="edit-3"></i> Tự soạn
+              </button>
+              <button class="mode-tab" data-mode="news" data-i18n="tab_news">
+                <i data-lucide="newspaper"></i> Săn tin tức
+              </button>
+              <button class="mode-tab" data-mode="url" data-i18n="tab_url">
+                <i data-lucide="link"></i> Link bài báo
+              </button>
             </div>
 
-            <div id="newsLoadingStatus" class="news-loading hidden">
-              <div class="news-loading-spinner"></div>
-              <span id="newsLoadingText">🔍 Đang tìm kiếm tin tức...</span>
+            <div id="mode-standard" class="mode-content active">
+
+              <div class="form-group">
+                <label class="form-label" for="videoPrompt" data-i18n="label_prompt">
+                  <i data-lucide="message-square" style="width:13px;height:13px;"></i>
+                  Nội dung video bạn muốn tạo
+                </label>
+                <textarea id="videoPrompt" class="form-textarea" rows="4"
+                  placeholder="VD: Tạo video giới thiệu về trí tuệ nhân tạo..."
+                  data-i18n-placeholder="placeholder_prompt"></textarea>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="videoStyle" data-i18n="label_style">
+                  <i data-lucide="palette" style="width:13px;height:13px;"></i>
+                  Phong cách video
+                </label>
+                <select id="videoStyle" class="form-select">
+                  <option value="">Để AI tự chọn</option>
+                  <option value="cinematic">Cinematic — Điện ảnh</option>
+                  <option value="educational">Educational — Giáo dục</option>
+                  <option value="promotional">Promotional — Quảng bá</option>
+                  <option value="documentary">Documentary — Tài liệu</option>
+                  <option value="motivational">Motivational — Truyền cảm hứng</option>
+                </select>
+              </div>
+
+              <div class="form-group" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border);">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <label class="form-label" for="scene-count-slider" style="margin-bottom: 0;" data-i18n="label_scenes">
+                    <i data-lucide="layers" style="width:13px;height:13px;"></i>
+                    Số khung hình (Scenes)
+                  </label>
+                  <span id="scene-count-display" class="scene-count-badge">6</span>
+                </div>
+                <input type="range" id="scene-count-slider" min="1" max="30" value="6" step="1"
+                  class="scene-count-slider" />
+              </div>
+              <br/>
+
+              <button class="btn btn-primary btn-full" id="generateScriptBtn" onclick="handleGenerate()"
+                data-i18n="btn_generate">
+                <i data-lucide="wand-2" style="width:15px;height:15px;"></i>
+                Tạo video ngay
+              </button>
             </div>
 
-            <button class="btn btn-primary btn-full" id="btnGenerateNews">
-              <i data-lucide="search-code" style="width:15px;height:15px;"></i>
-              Săn tin & Làm Video
-            </button>
+            <!-- News Hunter Mode -->
+            <div id="mode-news" class="mode-content">
+              <div class="form-group">
+                <label class="form-label" for="newsTopicInput" data-i18n="label_news_topic">
+                  <i data-lucide="search" style="width:13px;height:13px;"></i>
+                  Chủ đề tin tức muốn săn
+                </label>
+                <input type="text" id="newsTopicInput" class="form-input"
+                  placeholder="VD: Đột phá AI mới nhất, Thị trường chứng khoán..."
+                  data-i18n-placeholder="placeholder_news_topic" />
+              </div>
+
+              <div id="newsLoadingStatus" class="news-loading hidden">
+                <div class="news-loading-spinner"></div>
+                <span id="newsLoadingText">🔍 Đang tìm kiếm tin tức...</span>
+              </div>
+
+              <button class="btn btn-primary btn-full" id="btnGenerateNews" data-i18n="btn_hunt">
+                <i data-lucide="search-code" style="width:15px;height:15px;"></i>
+                Săn tin & Làm Video
+              </button>
+            </div>
+
+            <!-- URL Mode -->
+            <div id="mode-url" class="mode-content">
+              <div class="form-group">
+                <label class="form-label" for="articleUrlInput" data-i18n="label_article_url">
+                  <i data-lucide="link" style="width:13px;height:13px;"></i>
+                  Dán link bài báo (https://...)
+                </label>
+                <input
+                  type="url"
+                  id="articleUrlInput"
+                  class="form-input"
+                  placeholder="https://example.com/news/article"
+                  data-i18n-placeholder="placeholder_article_url"
+                />
+              </div>
+
+              <button class="btn btn-primary btn-full" id="btnGenerateFromUrl" data-i18n="btn_url_hunt">
+                <i data-lucide="wand" style="width:15px;height:15px;"></i>
+                Làm Video từ Link
+              </button>
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- Script Preview Panel (Hidden completely as requested) -->
-      <div id="scriptPanel" style="display:none;"></div>
+        <!-- Script Preview Panel (Hidden completely as requested) -->
+        <div id="scriptPanel" style="display:none;"></div>
 
-      <!-- Audio Settings -->
-      <div class="panel" id="audioPanel">
-        <div class="panel-header">
-          <div class="panel-title">
+        <!-- Audio Settings -->
+        <div class="panel" id="audioPanel">
+          <div class="panel-header" data-i18n="panel_audio_title">
             <i data-lucide="mic-2" style="width:16px;height:16px;"></i>
             Giọng đọc
           </div>
-        </div>
-        <div class="panel-body">
-          <div class="tabs">
-            <button class="tab-btn active" data-tab="free" id="tabFree">
-              <i data-lucide="zap" style="width:13px;height:13px;"></i>
-              Miễn phí
-            </button>
-            <button class="tab-btn" data-tab="elevenlabs" id="tabElevenLabs">
-              <i data-lucide="volume-2" style="width:13px;height:13px;"></i>
-              ElevenLabs
-            </button>
-          </div>
-
-          <div class="tab-content active" id="tab-free">
-            <div class="alert alert-success" style="font-size:0.775rem; margin-bottom: 0.75rem;">
-              <i data-lucide="sparkles" style="width:14px;height:14px;flex-shrink:0;"></i>
-              <span>Giọng đọc Tiếng Việt chất lượng cao.</span>
+          <div class="panel-body">
+            <div class="tabs">
+              <button class="tab-btn active" data-tab="free" id="tabFree">
+                <i data-lucide="zap" style="width:13px;height:13px;"></i>
+                Miễn phí
+              </button>
+              <button class="tab-btn" data-tab="edge" id="tabEdge">
+                <i data-lucide="mic-2" style="width:13px;height:13px;"></i>
+                Edge TTS
+              </button>
             </div>
-            <div class="form-group">
-              <label class="form-label">Tốc độ đọc</label>
-              <input type="range" id="speechRate" min="0.5" max="2.0" step="0.1" value="1.0" style="width:100%;accent-color:#a855f7;" />
-              <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--text-muted);">
-                <span>Chậm</span><span id="rateLabel">1.0x</span><span>Nhanh</span>
+
+            <div class="tab-content active" id="tab-free">
+              <div class="alert alert-success" style="font-size:0.775rem; margin-bottom: 0.75rem;">
+                <i data-lucide="sparkles" style="width:14px;height:14px;flex-shrink:0;"></i>
+                <span data-i18n="alert_voice_free">Giọng đọc Tiếng Việt chất lượng cao.</span>
+              </div>
+              <div class="form-group">
+                <label class="form-label" data-i18n="label_speech_rate">Tốc độ đọc</label>
+                <input type="range" id="speechRate" min="0.5" max="2.0" step="0.1" value="1.0"
+                  style="width:100%;accent-color:#a855f7;" />
+                <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--text-muted);">
+                  <span data-i18n="label_slow">Chậm</span><span id="rateLabel">1.0x</span><span
+                    data-i18n="label_fast">Nhanh</span>
+                </div>
+              </div>
+              <div class="form-group" style="margin-top: 0.5rem;">
+                <button class="btn btn-secondary btn-full btn-sm" id="testVoiceFreeBtn" data-i18n="btn_test_voice">
+                  <i data-lucide="play-circle" style="width:14px;height:14px;"></i>
+                  Nghe thử mẫu
+                </button>
               </div>
             </div>
-            <div class="form-group" style="margin-top: 0.5rem;">
-              <button class="btn btn-secondary btn-full btn-sm" id="testVoiceFreeBtn">
-                <i data-lucide="play-circle" style="width:14px;height:14px;"></i>
-                Nghe thử mẫu
-              </button>
+
+            <div class="tab-content" id="tab-edge">
+              <div class="alert alert-success" style="font-size:0.775rem; margin-bottom: 0.75rem;">
+                <i data-lucide="sparkles" style="width:14px;height:14px;flex-shrink:0;"></i>
+                <span>322+ giọng đọc neural — miễn phí, không cần API key.</span>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Giọng đọc</label>
+                <select id="edgeVoiceSelect" class="form-select"></select>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Phong cách đọc</label>
+                <select id="edgeVoiceStyle" class="form-select">
+                  <option value="default">Mặc định</option>
+                  <option value="slow">Chậm rãi</option>
+                  <option value="fast">Nhanh</option>
+                  <option value="serious">Nghiêm túc</option>
+                  <option value="energetic">Năng động</option>
+                  <option value="calm">Bình tĩnh</option>
+                  <option value="cheerful">Vui vẻ</option>
+                  <option value="documentary">Phong cách tài liệu</option>
+                  <option value="news">Phong cách bản tin</option>
+                </select>
+              </div>
+
+              <div class="form-group" style="margin-top: 0.5rem;">
+                <button class="btn btn-secondary btn-full btn-sm" id="testEdgeVoiceBtn">
+                  <i data-lucide="play-circle" style="width:14px;height:14px;"></i>
+                  Nghe thử
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </aside>
+
+      <!-- ── RIGHT PANEL ───────────────────────────────────────────────────── -->
+      <div class="video-panel">
+
+        <!-- Canvas -->
+        <div class="panel">
+          <div class="canvas-container">
+            <canvas id="videoCanvas" width="1280" height="720"></canvas>
+            <div class="canvas-overlay" id="canvasOverlay">
+              <div class="canvas-overlay-icon">
+                <i data-lucide="clapperboard" style="width:32px;height:32px;color:#fff;"></i>
+              </div>
+              <h3 data-i18n="canvas_placeholder_title">Video hiển thị tại đây!</h3>
+              <p data-i18n="canvas_placeholder_desc">Nhập nội dung và bắt đầu tạo ngay video chuyên nghiệp</p>
             </div>
           </div>
 
-          <div class="tab-content" id="tab-elevenlabs">
-            <div class="form-group">
-              <label class="form-label">Chọn giọng</label>
-              <select id="voiceSelect" class="form-select">
-                <option value="EXAVITQu4vr4xnSDxMaL">Sarah (Default)</option>
-              </select>
+          <!-- Progress -->
+          <div class="progress-section" id="progressSection" style="display:none;">
+            <div class="progress-info">
+              <span class="progress-label" id="progressLabel" data-i18n="label_generating">Đang tạo...</span>
+              <span class="progress-pct" id="progressPct">0%</span>
             </div>
-            <div class="form-group" style="margin-top: 0.5rem;">
-              <button class="btn btn-secondary btn-full btn-sm" id="testVoiceBtn">
-                <i data-lucide="play-circle" style="width:14px;height:14px;"></i>
-                Nghe thử
-              </button>
+            <div class="progress-bar-track">
+              <div class="progress-bar-fill" id="progressBar" style="width:0%;"></div>
             </div>
           </div>
+
+          <!-- Video Controls -->
+          <div class="video-controls">
+            <button class="btn btn-secondary btn-icon" id="playStopBtn" disabled data-tooltip="Xem thử / Dừng">
+              <i data-lucide="play" id="playStopIcon" style="width:18px;height:18px;"></i>
+            </button>
+
+            <div style="flex:1;"></div>
+
+            <button class="btn btn-ghost" id="resetBtn" style="gap: 6px; padding: 0 12px;">
+              <i data-lucide="sparkles" style="width:16px;height:16px;"></i>
+              <span style="font-size: 0.85rem; font-weight: 600;" data-i18n="btn_new_session">Phiên mới</span>
+            </button>
+          </div>
+
+          <!-- Logs (Will be hidden/cleared in app.js) -->
+          <div class="log-panel" id="logPanel" style="display:none;"></div>
+
         </div>
-      </div>
 
-    </aside>
-
-    <!-- ── RIGHT PANEL ───────────────────────────────────────────────────── -->
-    <div class="video-panel">
-
-      <!-- Canvas -->
-      <div class="panel">
-        <div class="canvas-container">
-          <canvas id="videoCanvas" width="1280" height="720"></canvas>
-          <div class="canvas-overlay" id="canvasOverlay">
-            <div class="canvas-overlay-icon">
-              <i data-lucide="clapperboard" style="width:32px;height:32px;color:#fff;"></i>
+        <!-- Download Section -->
+        <div class="panel" id="downloadSection" style="display:none;">
+          <div class="download-ready">
+            <div class="download-icon" style="background: #a855f7;">
+              <i data-lucide="check-circle-2" style="width:36px;height:36px;color:#fff;"></i>
             </div>
-            <h3>Video hiển thị tại đây!</h3>
-            <p>Nhập nội dung và bắt đầu tạo ngay video chuyên nghiệp</p>
+            <h3 data-i18n="download_ready_title">Video đã sẵn sàng!</h3>
+            <!-- Video Preview Player -->
+            <div class="video-preview-container"
+              style="width: 100%; margin: 1.5rem 0; background: #000; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
+              <video id="finalPreview" controls
+                style="width: 100%; max-height: 450px; display: block; object-fit: contain;"></video>
+            </div>
+            <div style="display:flex;gap:0.75rem;flex-wrap:wrap;justify-content:center;margin-top:1rem;">
+              <a id="downloadLink" href="#" download="video.webm" class="btn btn-success" data-i18n="btn_download">
+                <i data-lucide="download" style="width:15px;height:15px;"></i>
+                Tải xuống
+              </a>
+            </div>
           </div>
         </div>
 
-        <!-- Progress -->
-        <div class="progress-section" id="progressSection" style="display:none;">
-          <div class="progress-info">
-            <span class="progress-label" id="progressLabel">Đang tạo...</span>
-            <span class="progress-pct" id="progressPct">0%</span>
-          </div>
-          <div class="progress-bar-track">
-            <div class="progress-bar-fill" id="progressBar" style="width:0%;"></div>
-          </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- SETTINGS MODAL -->
+  <div class="modal-backdrop" id="settingsModal">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title" data-i18n="settings_title">Cài đặt API</div>
+        <button class="btn btn-ghost btn-icon" id="closeSettingsBtn"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" data-i18n="settings_gemini">Gemini API Key</label>
+          <input type="password" id="geminiKeyInput" class="form-input" />
         </div>
-
-        <!-- Video Controls -->
-        <div class="video-controls">
-          <button class="btn btn-secondary btn-icon" id="playStopBtn" disabled data-tooltip="Xem thử / Dừng">
-            <i data-lucide="play" id="playStopIcon" style="width:18px;height:18px;"></i>
-          </button>
-          
-          <div style="flex:1;"></div>
-
-          <button class="btn btn-ghost" id="resetBtn" style="gap: 6px; padding: 0 12px;">
-            <i data-lucide="sparkles" style="width:16px;height:16px;"></i>
-            <span style="font-size: 0.85rem; font-weight: 600;">Phiên mới</span>
-          </button>
-        </div>
-        
-        <!-- Logs (Will be hidden/cleared in app.js) -->
-        <div class="log-panel" id="logPanel" style="display:none;"></div>
-
+        <!-- ElevenLabs API Key removed as we use Edge-TTS now -->
       </div>
-
-      <!-- Download Section -->
-      <div class="panel" id="downloadSection" style="display:none;">
-        <div class="download-ready">
-          <div class="download-icon" style="background: #a855f7;">
-            <i data-lucide="check-circle-2" style="width:36px;height:36px;color:#fff;"></i>
-          </div>
-          <h3>Video đã sẵn sàng!</h3>
-          <!-- Video Preview Player -->
-          <div class="video-preview-container" style="width: 100%; margin: 1.5rem 0; background: #000; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
-            <video id="finalPreview" controls style="width: 100%; max-height: 450px; display: block; aspect-ratio: 16/9; object-fit: contain;"></video>
-          </div>
-          <div style="display:flex;gap:0.75rem;flex-wrap:wrap;justify-content:center;margin-top:1rem;">
-            <a id="downloadLink" href="#" download="video.webm" class="btn btn-success">
-              <i data-lucide="download" style="width:15px;height:15px;"></i>
-              Tải xuống
-            </a>
-          </div>
-        </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary btn-full" id="saveSettingsBtn" data-i18n="settings_save">Lưu cài đặt</button>
       </div>
-
-    </div>
-  </main>
-</div>
-
-<!-- SETTINGS MODAL -->
-<div class="modal-backdrop" id="settingsModal">
-  <div class="modal">
-    <div class="modal-header">
-      <div class="modal-title">Cài đặt API</div>
-      <button class="btn btn-ghost btn-icon" id="closeSettingsBtn"><i data-lucide="x"></i></button>
-    </div>
-    <div class="modal-body">
-      <div class="form-group">
-        <label class="form-label">Gemini API Key</label>
-        <input type="password" id="geminiKeyInput" class="form-input" />
-      </div>
-      <div class="form-group">
-        <label class="form-label">ElevenLabs API Key</label>
-        <input type="password" id="elevenLabsKeyInput" class="form-input" />
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-primary btn-full" id="saveSettingsBtn">Lưu cài đặt</button>
     </div>
   </div>
-</div>
 
-<script src="renderer.js"></script>
-<script src="app.js"></script>
-<script>lucide.createIcons();</script>
+  <script src="renderer.js"></script>
+  <script src="app.js"></script>
+  <script>lucide.createIcons();</script>
 </body>
+
 </html>

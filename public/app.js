@@ -2,38 +2,245 @@
 
 const $ = (id) => document.getElementById(id);
 
+/**
+ * Macrotask Yielding strategy using MessageChannel.
+ * Bypasses Background Tab Throttling (setTimeout/requestAnimationFrame are capped to 1fps in background).
+ * MessageChannel maintains priority and runs as fast as possible.
+ */
+const yieldControl = () => new Promise(resolve => {
+  const channel = new MessageChannel();
+  channel.port1.onmessage = resolve;
+  channel.port2.postMessage(null);
+});
+
 // ── DOM References ────────────────────────────────────────────────────────────
-const canvas          = $('videoCanvas');
-const canvasOverlay   = $('canvasOverlay');
-const generateBtn     = $('generateScriptBtn');
-const playStopBtn     = $('playStopBtn');
-const playStopIcon    = $('playStopIcon');
-const resetBtn        = $('resetBtn');
+const canvas = $('videoCanvas');
+const canvasOverlay = $('canvasOverlay');
+const generateBtn = $('generateScriptBtn');
+const playStopBtn = $('playStopBtn');
+const playStopIcon = $('playStopIcon');
+const resetBtn = $('resetBtn');
 const progressSection = $('progressSection');
-const progressBar     = $('progressBar');
-const progressPct     = $('progressPct');
-const progressLabel   = $('progressLabel');
-const scenesList      = $('scenesList');
-const scriptPanel     = $('scriptPanel');
+const progressBar = $('progressBar');
+const progressPct = $('progressPct');
+const progressLabel = $('progressLabel');
+const scenesList = $('scenesList');
+const scriptPanel = $('scriptPanel');
 const downloadSection = $('downloadSection');
-const downloadLink    = $('downloadLink');
-const logPanel        = $('logPanel');
+const downloadLink = $('downloadLink');
+const logPanel = $('logPanel');
 const btnGenerateNews = $('btnGenerateNews');
 const newsLoadingStatus = $('newsLoadingStatus');
 const newsLoadingText = $('newsLoadingText');
 
-// ── State ─────────────────────────────────────────────────────────────────────
-let renderer       = null;
-let currentScript  = null;
-let mediaRecorder  = null;
-let recordedChunks = [];
-let isRunning      = false;
-let isPreviewMode  = false;
-let videoBlob      = null;
-let activeTab      = 'free';
-let speechRate     = 1.0;
+let newsLoadingInterval = null;
+const newsMessages = [
+  "🔍 Đang săn tìm tin tức nóng hổi trên toàn cầu...",
+  "🌐 Đang kết nối với các nguồn báo uy tín...",
+  "📄 Đang đọc và phân tích nội dung chuyên sâu...",
+  "🧠 AI đang chắt lọc thông tin quan trọng nhất...",
+  "✍️ Đang biên tập kịch bản video chuyên nghiệp...",
+  "🎬 Đang chuẩn bị các cảnh quay tối ưu..."
+];
 
-let activeAudio   = null;
+// ── i18n Translations ─────────────────────────────────────────────────────────
+const i18n = {
+  vi: {
+    app_title: "Công cụ tạo video bằng ",
+    panel_title: "Tạo Video AI",
+    tab_standard: "Tự soạn",
+    tab_news: "Săn tin tức",
+    label_prompt: "Nội dung video bạn muốn tạo",
+    placeholder_prompt: "VD: Tạo video giới thiệu về trí tuệ nhân tạo...",
+    label_style: "Phong cách video",
+    label_scenes: "Số khung hình (Scenes)",
+    btn_generate: "Tạo video ngay",
+    label_news_topic: "Chủ đề tin tức muốn săn",
+    placeholder_news_topic: "VD: Đột phá AI mới nhất, Thị trường chứng khoán...",
+    btn_hunt: "Săn tin & Làm Video",
+    tab_url: "Link bài báo",
+    label_article_url: "Dán link bài báo (https://...)",
+    placeholder_article_url: "https://example.com/news/article",
+    btn_url_hunt: "Làm Video từ Link",
+    msg_scraping_url: "🌐 Đang cào dữ liệu từ bài báo...",
+    panel_audio_title: "Giọng đọc",
+    tab_free: "Miễn phí",
+    alert_voice_free: "Giọng đọc Tiếng Việt chất lượng cao.",
+    label_speech_rate: "Tốc độ đọc",
+    label_slow: "Chậm",
+    label_fast: "Nhanh",
+    btn_test_voice: "Nghe thử mẫu",
+    label_voice_select: "Chọn giọng",
+    canvas_placeholder_title: "Video hiển thị tại đây!",
+    canvas_placeholder_desc: "Nhập nội dung và bắt đầu tạo ngay video chuyên nghiệp",
+    label_generating: "Đang tạo...",
+    btn_new_session: "Phiên mới",
+    download_ready_title: "Video đã sẵn sàng!",
+    btn_download: "Tải xuống",
+    btn_reset: "Làm lại",
+    settings_title: "Cài đặt API",
+    settings_gemini: "Gemini API Key",
+    settings_eleven: "ElevenLabs API Key",
+    settings_save: "Lưu cài đặt",
+    msg_search_news: "🔍 Đang săn tìm tin tức nóng hổi trên toàn cầu...",
+    msg_connect_sources: "🌐 Đang kết nối với các nguồn báo uy tín...",
+    msg_analyze_content: "📄 Đang đọc và phân tích nội dung chuyên sâu...",
+    msg_ai_extract: "🧠 AI đang chắt lọc thông tin quan trọng nhất...",
+    msg_edit_script: "✍️ Đang biên tập kịch bản video chuyên nghiệp...",
+    msg_prepare_scenes: "🎬 Đang chuẩn bị các cảnh quay tối ưu..."
+  },
+  en: {
+    app_title: "Video Creator with ",
+    panel_title: "Create Video AI",
+    tab_standard: "Standard",
+    tab_news: "News Hunter",
+    label_prompt: "Video Content Prompt",
+    placeholder_prompt: "e.g., Create a video introducing AI...",
+    label_style: "Video Style",
+    label_scenes: "Number of Scenes",
+    btn_generate: "Create Video Now",
+    label_news_topic: "News Topic to Hunt",
+    placeholder_news_topic: "e.g., Latest AI Breakthroughs, Stock Market...",
+    btn_hunt: "Hunt & Create Video",
+    tab_url: "Article Link",
+    label_article_url: "Paste Article Link (https://...)",
+    placeholder_article_url: "https://example.com/news/article",
+    btn_url_hunt: "Make Video from Link",
+    msg_scraping_url: "🌐 Scraping article content...",
+    panel_audio_title: "Voice",
+    tab_free: "Free",
+    alert_voice_free: "High quality Vietnamese/English voices.",
+    label_speech_rate: "Speech Rate",
+    label_slow: "Slow",
+    label_fast: "Fast",
+    btn_test_voice: "Test Voice",
+    label_voice_select: "Select Voice",
+    canvas_placeholder_title: "Video will appear here!",
+    canvas_placeholder_desc: "Enter a prompt and start creating professional videos",
+    label_generating: "Generating...",
+    btn_new_session: "New Session",
+    download_ready_title: "Video is Ready!",
+    btn_download: "Download",
+    btn_reset: "Reset",
+    settings_title: "API Settings",
+    settings_gemini: "Gemini API Key",
+    settings_eleven: "ElevenLabs API Key",
+    settings_save: "Save Settings",
+    msg_search_news: "🔍 Hunting for breaking news globally...",
+    msg_connect_sources: "🌐 Connecting to trusted news sources...",
+    msg_analyze_content: "📄 Reading and analyzing in-depth content...",
+    msg_ai_extract: "🧠 AI is extracting key information...",
+    msg_edit_script: "✍️ Editing professional video script...",
+    msg_prepare_scenes: "🎬 Preparing optimized scenes..."
+  }
+};
+
+let currentLang = localStorage.getItem('appLang') || 'vi';
+
+function setLanguage(lang) {
+  currentLang = lang;
+  localStorage.setItem('appLang', lang);
+
+  // Update Buttons
+  document.querySelectorAll('.lang-btn').forEach(btn => {
+    if (btn.dataset.lang === lang) btn.classList.add('active');
+    else btn.classList.remove('active');
+  });
+
+  // Update Elements with data-i18n
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.dataset.i18n;
+    if (i18n[lang][key]) {
+      // Preserve icon if present
+      const icon = el.querySelector('i');
+      if (icon) {
+        el.innerHTML = '';
+        el.appendChild(icon);
+        el.appendChild(document.createTextNode(' ' + i18n[lang][key]));
+      } else {
+        el.textContent = i18n[lang][key];
+      }
+    }
+  });
+
+  // Update Placeholders
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    const key = el.dataset.i18n_placeholder || el.getAttribute('data-i18n-placeholder');
+    if (i18n[lang][key]) {
+      el.placeholder = i18n[lang][key];
+    }
+  });
+
+  // Update news loading messages
+  updateNewsMessages(lang);
+}
+
+function updateNewsMessages(lang) {
+  newsMessages[0] = i18n[lang].msg_search_news;
+  newsMessages[1] = i18n[lang].msg_connect_sources;
+  newsMessages[2] = i18n[lang].msg_analyze_content;
+  newsMessages[3] = i18n[lang].msg_ai_extract;
+  newsMessages[4] = i18n[lang].msg_edit_script;
+  newsMessages[5] = i18n[lang].msg_prepare_scenes;
+}
+
+// Init Language on Load
+document.addEventListener('DOMContentLoaded', () => {
+  setLanguage(currentLang);
+
+  document.querySelectorAll('.lang-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const lang = btn.dataset.lang;
+      if (lang) setLanguage(lang);
+    });
+  });
+});
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let renderer = null;
+let currentScript = null;
+let mediaRecorder = null;
+let recordedChunks = [];
+let isRunning = false;
+let isPreviewMode = false;
+let videoBlob = null;
+let activeTab = 'free';
+let speechRate = 1.0;
+
+let activeAudio = null;
+let currentOrientation = 'landscape';
+
+// ── Orientation Handling ──────────────────────────────────────────────────────
+const orientations = {
+  landscape: { w: 1920, h: 1080 },
+  portrait: { w: 1080, h: 1920 }
+};
+
+function setOrientation(mode) {
+  currentOrientation = mode;
+  const dims = orientations[mode];
+  
+  // Update UI state
+  document.querySelectorAll('.orientation-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.orientation === mode);
+  });
+
+  // Resize canvas
+  canvas.width = dims.w;
+  canvas.height = dims.h;
+
+  // Update renderer
+  if (renderer) {
+    renderer.W = dims.w;
+    renderer.H = dims.h;
+    renderer.initParticles();
+    renderer.drawIdleScreen();
+  }
+}
+
+document.querySelectorAll('.orientation-btn').forEach(btn => {
+  btn.addEventListener('click', () => setOrientation(btn.dataset.orientation));
+});
 
 // ── Init Renderer ─────────────────────────────────────────────────────────────
 renderer = new VideoRenderer(canvas);
@@ -55,10 +262,44 @@ function setProgress(pct, label) {
 function getHeaders() {
   const headers = { 'Content-Type': 'application/json' };
   const geminiKey = localStorage.getItem('geminiKey');
-  const elevenLabsKey = localStorage.getItem('elevenLabsKey');
   if (geminiKey) headers['X-Gemini-Key'] = geminiKey;
-  if (elevenLabsKey) headers['X-ElevenLabs-Key'] = elevenLabsKey;
   return headers;
+}
+
+/**
+ * Preload AI-generated images for all scenes concurrently.
+ * This ensures no frame drops or SecurityErrors during render.
+ */
+async function preloadSceneImages(scenes) {
+  let loadedCount = 0;
+  const total = scenes.filter(s => s.imagePrompt).length;
+
+  for (const [index, scene] of scenes.entries()) {
+    if (!scene.imagePrompt) continue;
+
+    try {
+      loadedCount++;
+      setProgress(5 + (loadedCount / total) * 10, `Đang tạo ảnh AI cho cảnh ${loadedCount}/${total}...`);
+      
+      // Sequential loading with a larger gap to respect free service limits
+      if (index > 0) await new Promise(r => setTimeout(r, 2000));
+
+      const response = await fetch(`/api/scene-image?prompt=${encodeURIComponent(scene.imagePrompt)}`);
+      if (!response.ok) throw new Error("Image proxy failed");
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      
+      const img = new Image();
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+        img.src = url;
+      });
+      scene.loadedImage = img;
+    } catch (err) {
+      console.error(`Image preload failed for scene ${index + 1}:`, err);
+    }
+  }
 }
 
 // ── Settings Modal ────────────────────────────────────────────────────────────
@@ -69,15 +310,12 @@ $('settingsBtn').addEventListener('click', () => {
 });
 $('closeSettingsBtn').addEventListener('click', () => $('settingsModal').classList.remove('open'));
 $('saveSettingsBtn').addEventListener('click', async () => {
-  const geminiKey    = $('geminiKeyInput').value.trim();
-  const elevenLabsKey = $('elevenLabsKeyInput').value.trim();
+  const geminiKey = $('geminiKeyInput').value.trim();
   if (!geminiKey) return alert('Gemini API key không được để trống!');
-  
+
   try {
     localStorage.setItem('geminiKey', geminiKey);
-    localStorage.setItem('elevenLabsKey', elevenLabsKey);
     $('settingsModal').classList.remove('open');
-    if (elevenLabsKey) loadVoices();
   } catch (e) { alert('Lỗi khi lưu: ' + e.message); }
 });
 
@@ -93,16 +331,6 @@ document.querySelectorAll('.mode-tab').forEach((btn) => {
 });
 
 // ── News Hunter Logic ─────────────────────────────────────────────────────────
-let newsLoadingInterval = null;
-const newsMessages = [
-  "🔍 Đang săn tìm tin tức nóng hổi trên toàn cầu...",
-  "🌐 Đang kết nối với các nguồn báo uy tín...",
-  "📄 Đang đọc và phân tích nội dung chuyên sâu...",
-  "🧠 AI đang chắt lọc thông tin quan trọng nhất...",
-  "✍️ Đang biên tập kịch bản video chuyên nghiệp...",
-  "🎬 Đang chuẩn bị các cảnh quay tối ưu..."
-];
-
 async function handleNewsHunter() {
   const topic = $('newsTopicInput').value.trim();
   if (!topic) return alert('Vui lòng nhập chủ đề tin tức!');
@@ -111,7 +339,7 @@ async function handleNewsHunter() {
   newsLoadingStatus.classList.remove('hidden');
   let msgIdx = 0;
   newsLoadingText.textContent = newsMessages[0];
-  
+
   // Rotate messages every 5-7 seconds
   newsLoadingInterval = setInterval(() => {
     msgIdx = (msgIdx + 1) % newsMessages.length;
@@ -122,7 +350,7 @@ async function handleNewsHunter() {
     const r = await fetch('/api/news-to-video', {
       method: 'POST',
       headers: getHeaders(),
-      body: JSON.stringify({ topic })
+      body: JSON.stringify({ topic, orientation: currentOrientation })
     });
 
     const data = await r.json();
@@ -152,6 +380,61 @@ if (btnGenerateNews) {
   btnGenerateNews.addEventListener('click', handleNewsHunter);
 }
 
+// ── Article URL Logic ────────────────────────────────────────────────────────
+async function handleUrlToVideo() {
+  const articleUrl = $('articleUrlInput').value.trim();
+  if (!articleUrl) return alert(currentLang === 'vi' ? 'Vui lòng dán link bài báo!' : 'Please paste an article URL!');
+  
+  if (!articleUrl.startsWith('http')) {
+    return alert(currentLang === 'vi' ? 'URL phải bắt đầu bằng http:// hoặc https://' : 'URL must start with http:// or https://');
+  }
+
+  const btn = $('btnGenerateFromUrl');
+  btn.disabled = true;
+  newsLoadingStatus.classList.remove('hidden');
+  let msgIdx = 0;
+  
+  // Custom first message for URL mode
+  newsLoadingText.textContent = i18n[currentLang].msg_scraping_url;
+
+  newsLoadingInterval = setInterval(() => {
+    msgIdx = (msgIdx + 1) % newsMessages.length;
+    newsLoadingText.textContent = newsMessages[msgIdx];
+  }, 6000);
+
+  try {
+    const r = await fetch('/api/url-to-video', {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ articleUrl, orientation: currentOrientation })
+    });
+
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+
+    clearInterval(newsLoadingInterval);
+    newsLoadingStatus.classList.add('hidden');
+    btn.disabled = false;
+
+    currentScript = data;
+    startCreation(true);
+  } catch (e) {
+    clearInterval(newsLoadingInterval);
+    newsLoadingText.textContent = "❌ Lỗi: " + e.message;
+    newsLoadingText.style.color = "var(--danger)";
+    btn.disabled = false;
+    setTimeout(() => {
+      newsLoadingStatus.classList.add('hidden');
+      newsLoadingText.style.color = "#a855f7";
+    }, 5000);
+  }
+}
+
+const btnGenerateFromUrl = $('btnGenerateFromUrl');
+if (btnGenerateFromUrl) {
+  btnGenerateFromUrl.addEventListener('click', handleUrlToVideo);
+}
+
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 document.querySelectorAll('.tab-btn').forEach((btn) => {
   btn.addEventListener('click', () => {
@@ -164,22 +447,27 @@ document.querySelectorAll('.tab-btn').forEach((btn) => {
 });
 
 // ── Voice Loading ─────────────────────────────────────────────────────────────
-async function loadVoices() {
+async function loadEdgeVoices() {
   try {
-    const r = await fetch('/api/voices', { headers: getHeaders() });
-    const data = await r.json();
-    if (data.voices.length > 0) {
-      const sel = $('voiceSelect');
-      sel.innerHTML = '';
-      data.voices.forEach((v) => {
-        const opt = document.createElement('option');
-        opt.value = v.voice_id;
-        opt.textContent = `${v.name}`;
-        sel.appendChild(opt);
-      });
-    }
-  } catch (e) {}
+    const res = await fetch('/api/voices');
+    const data = await res.json();
+    const select = document.getElementById('edgeVoiceSelect');
+    if (!select || !data.voices) return;
+    select.innerHTML = '';
+    data.voices.forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v.voice_id;
+      opt.textContent = v.name;
+      select.appendChild(opt);
+    });
+  } catch (e) {
+    console.warn('Could not load Edge voices:', e);
+  }
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadEdgeVoices();
+});
 
 // ── Speech Rate ───────────────────────────────────────────────────────────────
 $('speechRate').addEventListener('input', (e) => {
@@ -189,10 +477,28 @@ $('speechRate').addEventListener('input', (e) => {
 
 // ── Test Voice ────────────────────────────────────────────────────────────────
 $('testVoiceFreeBtn').addEventListener('click', async () => {
-  await speakText('Xin chào! Đây là giọng đọc thử nghiệm của A.I.');
+  await speakText('Xin chào! Đây là giọng đọc mẫu của Google TTS');
 });
-$('testVoiceBtn').addEventListener('click', async () => {
-  await speakText('Xin chào! Đây là giọng đọc của ElevenLabs.');
+
+document.getElementById('testEdgeVoiceBtn')?.addEventListener('click', async () => {
+  const voiceId = document.getElementById('edgeVoiceSelect').value;
+  const voiceStyle = document.getElementById('edgeVoiceStyle').value;
+  const sampleText = 'Xin chào! Đây là giọng đọc Microsoft Edge TTS. Chất lượng rõ ràng và tự nhiên.';
+  
+  try {
+    const res = await fetch('/api/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: sampleText, voiceId, voiceStyle })
+    });
+    const data = await res.json();
+    if (data.audio) {
+      const audio = new Audio(`data:${data.mimeType};base64,${data.audio}`);
+      audio.play();
+    }
+  } catch (e) {
+    console.error('Test voice error:', e);
+  }
 });
 
 // ── Generate Script & Auto-Start ──────────────────────────────────────────────
@@ -211,6 +517,10 @@ window.handleGenerate = async () => {
     prompt += `If ${sceneCount} is large (15–30):\nExpand with more detail, examples, and deeper analysis.\n\n`;
   }
 
+  if (currentOrientation === 'portrait') {
+    prompt += `\n\nCRITICAL: This is a PORTRAIT (9:16) video for mobile/TikTok/Reels. Keep the "sceneTitle" very short (max 4-5 words) and centered in your logic. Narrative should be punchy. Ensure visual prompts work well for a vertical frame.`;
+  }
+
   // Resume context on user gesture
   if (audioCtx && audioCtx.state === 'suspended') {
     audioCtx.resume();
@@ -226,39 +536,39 @@ window.handleGenerate = async () => {
       headers: getHeaders(),
       body: JSON.stringify({ prompt }),
     });
-    
+
     const data = await r.json();
     if (!data.success) throw new Error(data.error);
 
     // Validate and sanitize the script structure (LLM Guardrails - Phase 4)
     if (!data.script || !Array.isArray(data.script.scenes)) {
-       throw new Error('Định dạng kịch bản trả về từ LLM không hợp lệ (mất scenes array).');
+      throw new Error('Định dạng kịch bản trả về từ LLM không hợp lệ (mất scenes array).');
     }
-    
+
     // Assign safe fallback defaults to prevent renderer crashes
     data.script.scenes.forEach(scene => {
-       scene.renderMode = scene.renderMode || 'default';
-       scene.animationStyle = scene.animationStyle || 'slide-up';
-       scene.backgroundTheme = scene.backgroundTheme || 'tech';
-       scene.accentColor = scene.accentColor || '#747689';
-       scene.estimatedDuration = scene.estimatedDuration || 5;
-       scene.narration = scene.narration || '';
-       
-       if (scene.elements && !Array.isArray(scene.elements)) {
-          scene.elements = [];
-       }
-       
-       if (scene.elements) {
-          scene.elements.forEach(el => {
-             el.type = el.type || 'stat-counter';
-             el.position = el.position || 'bottom-center';
-             el.label = el.label || '';
-             // Ensure chart data array exists to prevent runtime .forEach errors
-             if (el.type === 'chart' && !Array.isArray(el.data)) {
-                el.data = [{ label: 'A', value: 100 }];
-             }
-          });
-       }
+      scene.renderMode = scene.renderMode || 'default';
+      scene.animationStyle = scene.animationStyle || 'slide-up';
+      scene.backgroundTheme = scene.backgroundTheme || 'tech';
+      scene.accentColor = scene.accentColor || '#747689';
+      scene.estimatedDuration = scene.estimatedDuration || 5;
+      scene.narration = scene.narration || '';
+
+      if (scene.elements && !Array.isArray(scene.elements)) {
+        scene.elements = [];
+      }
+
+      if (scene.elements) {
+        scene.elements.forEach(el => {
+          el.type = el.type || 'stat-counter';
+          el.position = el.position || 'bottom-center';
+          el.label = el.label || '';
+          // Ensure chart data array exists to prevent runtime .forEach errors
+          if (el.type === 'chart' && !Array.isArray(el.data)) {
+            el.data = [{ label: 'A', value: 100 }];
+          }
+        });
+      }
     });
 
     currentScript = data.script;
@@ -268,11 +578,11 @@ window.handleGenerate = async () => {
     }
 
     canvasOverlay.classList.add('hidden');
-    
+
     // Auto-start creation immediately without showing the script
     isPreviewMode = false;
     startCreation(true);
-    
+
   } catch (e) {
     alert('Lỗi: ' + e.message);
   } finally {
@@ -292,7 +602,7 @@ playStopBtn.addEventListener('click', () => {
   if (audioCtx && audioCtx.state === 'suspended') {
     audioCtx.resume();
   }
-  
+
   if (isRunning) {
     stopAll();
   } else {
@@ -359,9 +669,23 @@ function setButtonState(state) {
 }
 
 // ── TTS Logic ─────────────────────────────────────────────────────────────────
+function getTTSParams() {
+  const activeTab = document.querySelector('.tab-btn.active')?.dataset?.tab;
+  
+  if (activeTab === 'edge') {
+    return {
+      voiceId: document.getElementById('edgeVoiceSelect')?.value || 'vi-VN-HoaiMyNeural',
+      voiceStyle: document.getElementById('edgeVoiceStyle')?.value || 'default',
+    };
+  }
+  
+  // Default: free tab (Google Translate) — no voiceId needed for /api/tts-free
+  return { voiceId: null, voiceStyle: 'default' };
+}
+
 async function speakText(text) {
-  if (activeTab === 'elevenlabs') {
-    const success = await speakElevenLabs(text);
+  if (activeTab === 'edge') {
+    const success = await speakAIVoice(text);
     if (success) return;
   }
   return speakFreeTTS(text);
@@ -386,12 +710,12 @@ function speakFreeTTS(text) {
         source.connect(masterGain);
       }
 
-      audio.onended = () => { 
+      audio.onended = () => {
         if (source) source.disconnect();
-        URL.revokeObjectURL(url); 
+        URL.revokeObjectURL(url);
         activeAudio = null;
         window.activeAudio = null;
-        resolve(true); 
+        resolve(true);
       };
       audio.onerror = () => {
         if (source) source.disconnect();
@@ -400,22 +724,22 @@ function speakFreeTTS(text) {
         resolve(false);
       };
       audio.play();
-    } catch (e) { 
+    } catch (e) {
       activeAudio = null;
       window.activeAudio = null;
-      resolve(false); 
+      resolve(false);
     }
   });
 }
 
-function speakElevenLabs(text) {
+function speakAIVoice(text) {
   return new Promise(async (resolve) => {
     try {
-      const voiceId = $('voiceSelect').value;
+      const { voiceId, voiceStyle } = getTTSParams();
       const r = await fetch('/api/tts', {
         method: 'POST',
         headers: getHeaders(),
-        body: JSON.stringify({ text, voiceId }),
+        body: JSON.stringify({ text, voiceId, voiceStyle }),
       });
       const data = await r.json();
       if (!data.success || data.useFallback) return resolve(false);
@@ -437,12 +761,12 @@ function speakElevenLabs(text) {
         source.connect(masterGain);
       }
 
-      audio.onended = () => { 
+      audio.onended = () => {
         if (source) source.disconnect();
-        URL.revokeObjectURL(url); 
+        URL.revokeObjectURL(url);
         activeAudio = null;
         window.activeAudio = null;
-        resolve(true); 
+        resolve(true);
       };
       audio.onerror = () => {
         if (source) source.disconnect();
@@ -451,10 +775,10 @@ function speakElevenLabs(text) {
         resolve(false);
       };
       await audio.play();
-    } catch (e) { 
+    } catch (e) {
       activeAudio = null;
       window.activeAudio = null;
-      resolve(false); 
+      resolve(false);
     }
   });
 }
@@ -472,43 +796,50 @@ async function setupAudioCapture() {
     if (audioCtx.state === 'suspended') {
       await audioCtx.resume();
     }
-    
+
     if (!currentAudioDestination) {
       currentAudioDestination = audioCtx.createMediaStreamDestination();
       masterGain = audioCtx.createGain();
       masterGain.connect(currentAudioDestination);
       masterGain.connect(audioCtx.destination); // Play to speakers too
     }
-    
+
     return currentAudioDestination.stream;
-  } catch (e) { 
-    return null; 
+  } catch (e) {
+    return null;
   }
 }
 
 // ── Offline Export Engine ─────────────────────────────────────────────────────
 async function getTTSAudioBuffer(text) {
-   if (activeTab === 'elevenlabs') {
-      const voiceId = $('voiceSelect').value;
+  try {
+    if (activeTab === 'edge') {
+      const { voiceId, voiceStyle } = getTTSParams();
       const r = await fetch('/api/tts', {
         method: 'POST',
         headers: getHeaders(),
-        body: JSON.stringify({ text, voiceId }),
+        body: JSON.stringify({ text, voiceId, voiceStyle }),
       });
       const data = await r.json();
-      if (data.success && !data.useFallback) {
-         const audioBytes = atob(data.audio);
-         const buf = new Uint8Array(audioBytes.length);
-         for (let i = 0; i < audioBytes.length; i++) buf[i] = audioBytes.charCodeAt(i);
-         return buf.buffer; // ArrayBuffer
+      if (data.success && !data.useFallback && data.audio) {
+        const audioBytes = atob(data.audio);
+        if (audioBytes.length > 0) {
+          const buf = new Uint8Array(audioBytes.length);
+          for (let i = 0; i < audioBytes.length; i++) buf[i] = audioBytes.charCodeAt(i);
+          return buf.buffer;
+        }
       }
-   }
-   
-   const r = await fetch(`/api/tts-free?text=${encodeURIComponent(text)}`);
-   if (r.ok) {
-     return await r.arrayBuffer();
-   }
-   return null;
+    }
+
+    const r = await fetch(`/api/tts-free?text=${encodeURIComponent(text)}`);
+    if (r.ok) {
+      const arrayBuf = await r.arrayBuffer();
+      return arrayBuf.byteLength > 0 ? arrayBuf : null;
+    }
+  } catch (err) {
+    console.error("getTTSAudioBuffer error:", err);
+  }
+  return null;
 }
 
 class ExportEngine {
@@ -583,7 +914,7 @@ class ExportEngine {
 
       this.audioEncoder.encode(audioData);
       audioData.close();
-      
+
       this.audioEncoder.flush().then(() => {
         this.audioEncoder.close();
         resolve();
@@ -596,7 +927,7 @@ class ExportEngine {
 
     // Throttle: Wait if the encoder queue is getting backed up to prevent GPU out-of-memory
     while (this.videoEncoder.encodeQueueSize > 30) {
-      await new Promise(r => setTimeout(r, 5));
+      await yieldControl();
       if (this.hasError) return;
     }
 
@@ -607,9 +938,9 @@ class ExportEngine {
       // Capture the canvas as an ImageBitmap to provide a stable texture for the encoder
       const bitmap = await createImageBitmap(this.canvas);
       const frame = new VideoFrame(bitmap, { timestamp: timestampMicro });
-      
+
       this.videoEncoder.encode(frame, { keyFrame });
-      
+
       frame.close();
       bitmap.close(); // Crucial to release the bitmap resource immediately
     } catch (e) {
@@ -642,6 +973,10 @@ async function startCreation(withRecording) {
   canvasOverlay.classList.add('hidden');
 
   const scenes = currentScript.scenes.map(s => ({ ...s, videoTitle: currentScript.videoTitle || '' }));
+
+  setProgress(5, "Đang tải tài nguyên hình ảnh...");
+  await preloadSceneImages(scenes);
+
   renderer.setScenes(scenes);
 
   for (let i = 0; i < scenes.length; i++) {
@@ -681,11 +1016,14 @@ async function startOfflineExport() {
   canvasOverlay.classList.add('hidden');
 
   const scenes = currentScript.scenes.map(s => ({ ...s, videoTitle: currentScript.videoTitle || '' }));
-  
+
+  setProgress(5, "Đang tải tài nguyên hình ảnh...");
+  await preloadSceneImages(scenes);
+
   if (!audioCtx) {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   }
-  
+
   // 1. Fetch and decode all audio
   const sceneAudioData = [];
   const ENTER_DURATION = 0.8;
@@ -697,20 +1035,25 @@ async function startOfflineExport() {
 
   for (let i = 0; i < scenes.length; i++) {
     if (!isRunning) return;
-    setProgress((i / scenes.length) * 20, `Đang tải âm thanh cảnh ${i+1}...`);
-    
+    setProgress((i / scenes.length) * 20, `Đang tải âm thanh cảnh ${i + 1}...`);
+
     let audioBuf = null;
     if (scenes[i].narration && scenes[i].narration.trim()) {
-       const arrayBuf = await getTTSAudioBuffer(scenes[i].narration);
-       if (arrayBuf) {
+      const arrayBuf = await getTTSAudioBuffer(scenes[i].narration);
+      if (arrayBuf && arrayBuf.byteLength > 0) {
+        try {
           audioBuf = await audioCtx.decodeAudioData(arrayBuf);
-       }
+        } catch (decodeErr) {
+          console.error(`Audio decoding failed for scene ${i + 1}:`, decodeErr);
+          audioBuf = null; // Proceed without audio for this scene
+        }
+      }
     }
     sceneAudioData.push(audioBuf);
-    
+
     const audioDur = audioBuf ? (audioBuf.duration / speechRate) : (scenes[i].estimatedDuration || 5);
     const sceneTotalSec = ENTER_DURATION + GAP_DURATION + audioDur + EXIT_DURATION;
-    
+
     sceneTimings.push({
       sceneStart: totalDurationSec,
       audioStart: totalDurationSec + ENTER_DURATION + GAP_DURATION,
@@ -718,13 +1061,13 @@ async function startOfflineExport() {
       audioDuration: audioDur,
       sceneEnd: totalDurationSec + sceneTotalSec
     });
-    
+
     totalDurationSec += sceneTotalSec;
   }
 
   if (!isRunning) return;
   setProgress(20, `Đang kết xuất Audio Track toàn cục...`);
-  
+
   // 2. Mix Offline Audio
   const offlineCtx = new OfflineAudioContext(2, Math.ceil(totalDurationSec * 48000), 48000);
   for (let i = 0; i < sceneTimings.length; i++) {
@@ -749,7 +1092,7 @@ async function startOfflineExport() {
   // 4. Render Offline Loop
   renderer.setScenes(scenes);
   renderer.offlineMode = true;
-  
+
   const totalFrames = Math.ceil(totalDurationSec * fps);
   let currentSceneIdx = 0;
   renderer.renderScene(0, 0);
@@ -765,7 +1108,7 @@ async function startOfflineExport() {
       currentSceneIdx++;
       renderer.renderScene(currentSceneIdx, currentMs);
     }
-    
+
     // Trigger Exit Animation
     if (renderer.phase === 'displaying' && currentTime >= timing.audioStart + timing.audioDuration) {
       renderer.exitScene(currentMs);
@@ -784,8 +1127,8 @@ async function startOfflineExport() {
     // Explicitly update time and render
     renderer.globalTime = currentTime;
     renderer.phaseTime = currentTime - (renderer.phaseStartTime / 1000);
-    renderer.updateParticles(1/fps);
-    renderer._drawScene(scenes[currentSceneIdx], 1/fps, currentMs);
+    renderer.updateParticles(1 / fps);
+    renderer._drawScene(scenes[currentSceneIdx], 1 / fps, currentMs);
 
     // Encode
     await exportEngine.encodeVideoFrame(f);
@@ -799,7 +1142,7 @@ async function startOfflineExport() {
     if (f % 10 === 0) {
       const pct = 25 + (f / totalFrames) * 70;
       setProgress(pct, `Đang Render Frame (${f}/${totalFrames}) - Đảm bảo mượt mà 60 FPS`);
-      await new Promise(r => setTimeout(r, 0));
+      await yieldControl();
     }
   }
 
@@ -810,17 +1153,17 @@ async function startOfflineExport() {
     const videoUrl = URL.createObjectURL(videoBlob);
     downloadLink.href = videoUrl;
     downloadLink.download = `MinusAI_Video_${Date.now()}.webm`;
-    
+
     // Set preview video
     const previewEl = $('finalPreview');
     if (previewEl) {
       previewEl.src = videoUrl;
       previewEl.load();
     }
-    
+
     downloadSection.style.display = 'block';
     downloadSection.scrollIntoView({ behavior: 'smooth' });
-    
+
     isRunning = false;
     setButtonState('done');
     progressSection.style.display = 'none';
@@ -847,6 +1190,7 @@ if (countSlider && countDisplay) {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 (async () => {
-  loadVoices();
+  loadEdgeVoices();
   lucide.createIcons();
 })();
+
