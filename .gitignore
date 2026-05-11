@@ -24,3 +24,9 @@ config.json
 [Bb]in/
 [Oo]bj/
 *.log
+
+#.md
+.DESIGN.md
+.gitignore
+.gitnexus/
+GITNEXUS_MCP_SETUP.md
