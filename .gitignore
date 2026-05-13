@@ -30,3 +30,4 @@ config.json
 .gitignore
 .gitnexus/
 GITNEXUS_MCP_SETUP.md
+DESIGN.md

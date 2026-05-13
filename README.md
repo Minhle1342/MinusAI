@@ -1,28 +1,34 @@
 # MinusAI: Autonomous Video Generation Engine
 
-> **Vision:** MinusAI is a high-performance, deterministic AI video generation engine that transforms simple text prompts or breaking news topics into professional, 60fps cinematic videos with synchronized audio, dynamic typography, and engaging visual effects—all running autonomously within the browser and Node.js backend.
+> **Vision:** MinusAI is a high-performance, deterministic AI video generation engine that transforms simple text prompts, breaking news, or full article URLs into professional, 60fps cinematic videos with synchronized audio, dynamic typography, and engaging visual effects—all running autonomously within the browser and Node.js backend.
 
 ## ✨ Key Features
 
-- **📰 Autonomous News Hunting:** Integrated with **Jina AI Search** (and adaptable for Tavily), the "News Hunter" pipeline scours the web for breaking news, extracts the "5 Ws" (Who, What, When, Where, Why), and synthesizes a 100% fact-grounded video script using **Gemini 3.1 Flash**.
-- **🎥 60FPS Deterministic Rendering:** Bypasses the unreliable, wall-clock dependent `MediaRecorder` in favor of a native **WebCodecs** (`VideoEncoder`) and `webm-muxer` pipeline. This ensures frame-perfect 60fps offline exports with zero dropped frames, regardless of GPU load.
-- **🎙️ Absolute Audio-Visual Sync:** Utilizes `OfflineAudioContext` to pre-render and mix the entire audio track (narration + gaps) into a single buffer before video encoding begins, serving as the "Single Source of Truth" for visual animations.
-- **🎨 Advanced Canvas Typography & Routing:** Features a robust Greedy Line Breaking typography engine (`wrapText`) anchored to safe visual zones (Top-Left), ensuring text and dynamic elements (charts, progress bars) never overlap.
+- **📰 Article-to-Video Pipeline:** Paste any news URL. The "News Hunter" (powered by **Jina AI**) scrapes the content, while Gemini 1.5 Flash extracts metadata, identifying thumbnails, YouTube clips, or direct MP4 links to include as dynamic scenes.
+- **🎥 Multimedia Directing:** Automatically selects the best visual assets from the source article. Supports direct video scene rendering with custom start/end timestamps via a custom **Range-aware Proxy**.
+- **📺 Direct YouTube Upload:** Integrated OAuth 2.0 flow allows you to upload exported videos directly to your channel. Automatically detects portrait orientation to publish as **YouTube Shorts** with appropriate tagging.
+- **🎙️ High-Fidelity TTS:** Features **Edge-TTS** for free, high-quality neural narration with multiple voice options, ensuring high-production value without API costs.
+- **🚀 60FPS Deterministic Rendering:** Bypasses the unreliable `MediaRecorder` in favor of a native **WebCodecs** (`VideoEncoder`) and `webm-muxer` pipeline for frame-perfect exports.
+- **🌍 Multi-Language Support:** Fully localized interface supporting English and Vietnamese, with an extensible i18n engine for dynamic UI translation.
+- **🛡️ Industrial Robustness:** Built-in global error handling, API timeouts, and client-side retry mechanisms to ensure high success rate in long video exports.
+- **🎨 Dynamic Typography:** Robust line-breaking engine anchored to safe visual zones, ensuring headlines and data visualizations (charts, stats) never overlap.
 
 ## 🛠️ Tech Stack
 
-- **Frontend:** Vanilla JavaScript, HTML5 Canvas API, WebCodecs (`VideoEncoder`, `AudioEncoder`), `webm-muxer`, `OfflineAudioContext`.
-- **Backend:** Node.js, Express.js, Axios.
+- **Frontend:** Vanilla JavaScript, HTML5 Canvas API, WebCodecs (`VideoEncoder`), `webm-muxer`, `OfflineAudioContext`.
+- **Backend:** Node.js, Express.js.
 - **AI & APIs:**
-  - **LLM:** Google Gemini 3.1 Flash Lite Preview (Script Synthesis & Directing)
-  - **Voice:** ElevenLabs API (Premium TTS) & Google Translate Proxy (Free Fallback)
-  - **Search:** Jina AI Search API (News crawling)
+  - **LLM:** Google Gemini 1.5 Flash (Scripting & Media Extraction)
+  - **Voice:** Edge-TTS (Neural Narration)
+  - **Search & Scraping:** Jina AI Search API
+  - **Video Hosting:** YouTube Data API v3 (Upload Pipeline)
 
 ## 🚀 Quick Start
 
 ### 1. Prerequisites
 - Node.js (v18+ recommended)
-- API Keys for Gemini, ElevenLabs (optional), and Jina AI.
+- API Keys for Gemini and Jina AI.
+- Google Cloud Project credentials for YouTube Upload (optional).
 
 ### 2. Environment Setup
 Copy the example environment file and fill in your keys:
@@ -30,32 +36,30 @@ Copy the example environment file and fill in your keys:
 cp .env.example .env
 ```
 
-Your `.env` should look like this (DO NOT expose real keys):
+Your `.env` should include:
 ```env
-# REQUIRED: Gemini API Key
-GEMINI_API_KEY=your_gemini_api_key_here
+# REQUIRED
+GEMINI_API_KEY=your_gemini_api_key
+JINA_API_KEY=your_jina_api_key
 
-# OPTIONAL: ElevenLabs API Key
-ELEVENLABS_API_KEY=your_elevenlabs_api_key_here
-ELEVENLABS_VOICE_ID=EXAVITQu4vr4xnSDxMaL
-
-# OPTIONAL: Jina Search API Key (for News Hunter)
-JINA_API_KEY=your_jina_api_key_here
+# OPTIONAL: YouTube Upload
+YOUTUBE_CLIENT_ID=your_client_id
+YOUTUBE_CLIENT_SECRET=your_client_secret
+YOUTUBE_REDIRECT_URI=http://localhost:3000/api/youtube/callback
 
 PORT=3000
 ```
 
 ### 3. Installation & Running
-Install dependencies and start the local server:
 ```bash
 npm install
 npm run dev
 ```
 
-Open your browser and navigate to `http://localhost:3000`.
+Open `http://localhost:3000` to start creating.
 
 ## 📖 Architecture Deep Dive
-For a comprehensive breakdown of the client-server data flow, deterministic export strategy, and anti-hallucination prompt engineering, see the [Architecture Documentation](architecture.md).
+For a comprehensive breakdown of the deterministic export strategy, media proxying, and sync logic, see the [Architecture Documentation](architecture.md).
 
 ---
-*MinusAI - Turning ideas into visual reality at 60 frames per second.*
+*MinusAI - Turning articles into visual reality at 60 frames per second.*

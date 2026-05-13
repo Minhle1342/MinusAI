@@ -34,8 +34,49 @@ class VideoRenderer {
     this.onSceneComplete = null;
     this.onSceneTitleShown = null;
 
+    // Video handling
+    this.videoElement = document.createElement('video');
+    this.videoElement.crossOrigin = 'anonymous';
+    this.videoElement.muted = true; // Required for auto-play/canvas draw in many browsers
+    this.videoElement.style.display = 'none';
+    document.body.appendChild(this.videoElement);
+    this.articleMedia = {};
+
     // Draw idle screen
     this.drawIdleScreen();
+  }
+
+  setArticleMedia(media) {
+    this.articleMedia = media || {};
+  }
+
+  async prepareVideoScene(scene) {
+    if (!scene.videoScene) return;
+
+    let url = this.articleMedia.videoUrl || '';
+    if (!url) {
+      // If it's a youtube scene but no direct stream link, we use the image fallback
+      // So we mute the video element just in case
+      this.videoElement.muted = true;
+      return;
+    }
+
+    // Direct MP4 should have audio (TTS is disabled for this scene in app.js)
+    this.videoElement.muted = false;
+    this.videoElement.src = `/api/proxy-video?url=${encodeURIComponent(url)}`;
+    this.videoElement.load();
+
+    return new Promise((resolve) => {
+      this.videoElement.oncanplay = () => {
+        this.videoElement.currentTime = scene.videoStart || 0;
+        resolve();
+      };
+      this.videoElement.onerror = () => {
+        console.error("Video load failed");
+        resolve();
+      };
+      setTimeout(resolve, 5000);
+    });
   }
 
   // ── Background Themes ─────────────────────────────────────────────────────
@@ -167,30 +208,32 @@ class VideoRenderer {
     ctx.fillRect(0, 0, this.W, this.H);
   }
 
-  // ── Image Rendering ───────────────────────────────────────────────────────
+  // ── Media Rendering ───────────────────────────────────────────────────────
   /**
-   * Draws an image to fill the canvas using "cover" logic (no distortion).
+   * Draws an image or video to fill the canvas using "cover" logic (no distortion).
    */
-  drawImageCover(img) {
+  drawMediaCover(el) {
     const ctx = this.ctx;
     const canvasRatio = this.W / this.H;
-    const imgRatio = img.width / img.height;
+    const elWidth = el.videoWidth || el.width;
+    const elHeight = el.videoHeight || el.height;
+    const elRatio = elWidth / elHeight;
 
     let drawW, drawH, offsetX, offsetY;
 
-    if (imgRatio > canvasRatio) {
+    if (elRatio > canvasRatio) {
       drawH = this.H;
-      drawW = img.width * (this.H / img.height);
+      drawW = elWidth * (this.H / elHeight);
       offsetX = (this.W - drawW) / 2;
       offsetY = 0;
     } else {
       drawW = this.W;
-      drawH = img.height * (this.W / img.width);
+      drawH = elHeight * (this.W / elWidth);
       offsetX = 0;
       offsetY = (this.H - drawH) / 2;
     }
 
-    ctx.drawImage(img, offsetX, offsetY, drawW, drawH);
+    ctx.drawImage(el, offsetX, offsetY, drawW, drawH);
   }
 
   // ── Decorative Elements ───────────────────────────────────────────────────
@@ -526,7 +569,7 @@ class VideoRenderer {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = 'rgba(255,255,255,0.08)';
-    ctx.fillText('VideoTool', this.W/2, this.H/2);
+    ctx.fillText('MinusAI', this.W/2, this.H/2);
   }
 
   // ── Transition Flash ──────────────────────────────────────────────────────
@@ -630,15 +673,69 @@ class VideoRenderer {
     }
 
     // Draw
-    if (scene.loadedImage) {
-      this.drawImageCover(scene.loadedImage);
+    if (scene.videoScene && this.videoElement.readyState >= 2) {
+      // Synchronize video time with phaseTime or audio
+      let targetTime = (scene.videoStart || 0) + this.phaseTime;
       
+      // Keep within bounds
+      if (scene.videoEnd && targetTime > scene.videoEnd) targetTime = scene.videoEnd;
+      
+      this.videoElement.currentTime = targetTime;
+      this.drawMediaCover(this.videoElement);
+
+      // Dark overlay
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.fillRect(0, 0, this.W, this.H);
+    } else if (scene.loadedImage) {
+      this.drawMediaCover(scene.loadedImage);
+      
+      // YouTube Play Button Overlay (if videoScene is true but we are using an image)
+      if (scene.videoScene) {
+        ctx.save();
+        const centerX = this.W / 2;
+        const centerY = this.H / 2;
+        const radius = 50;
+        
+        // Circle
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.8)';
+        ctx.fill();
+        
+        // Triangle (Play)
+        ctx.beginPath();
+        ctx.moveTo(centerX - 15, centerY - 20);
+        ctx.lineTo(centerX + 25, centerY);
+        ctx.lineTo(centerX - 15, centerY + 20);
+        ctx.closePath();
+        ctx.fillStyle = 'white';
+        ctx.fill();
+        ctx.restore();
+      }
+
       // Critical: Dark gradient overlay for typography readability
       const grad = ctx.createLinearGradient(0, 0, 0, this.H);
       grad.addColorStop(0, 'rgba(0,0,0,0.4)');
       grad.addColorStop(1, 'rgba(0,0,0,0.7)');
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, this.W, this.H);
+    } else if (this.currentSceneIdx === 0 && this.articleMedia.thumbnail) {
+        // Safety guard: if preloaded image exists, this branch is skipped 
+        // (Existing logic handles this, but kept as a fallback)
+        if (scene.loadedImage) return;
+
+        // Fallback to article thumbnail for scene 1 if no imagePrompt and not videoScene
+        if (!this.thumbnailImg) {
+            this.thumbnailImg = new Image();
+            this.thumbnailImg.src = `/api/proxy-image?url=${encodeURIComponent(this.articleMedia.thumbnail)}`;
+        }
+        if (this.thumbnailImg.complete) {
+            this.drawMediaCover(this.thumbnailImg);
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.fillRect(0, 0, this.W, this.H);
+        } else {
+            this.drawBackground(theme, accent, this.globalTime);
+        }
     } else {
       this.drawBackground(theme, accent, this.globalTime);
     }

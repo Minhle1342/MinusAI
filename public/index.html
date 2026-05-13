@@ -21,17 +21,16 @@
       <div class="header-inner">
         <a href="#" class="logo">
           <div class="logo-icon">
-            <i data-lucide="video" style="width:18px;height:18px;"></i>
+            <i data-lucide="video"></i>
           </div>
-          <span data-i18n="app_title">Công cụ tạo video bằng</span><span
-            style="color: #a855f7; font-weight: 900;">AI</span>
+          <span data-i18n="app_title">Minus</span><span style="font-weight: 700;">AI</span>
         </a>
         <div class="header-actions">
           <div class="lang-switcher">
             <button class="lang-btn active" data-lang="vi" title="Tiếng Việt">VI</button>
             <button class="lang-btn" data-lang="en" title="English">EN</button>
           </div>
-          <button class="btn btn-secondary btn-icon" id="settingsBtn" data-tooltip="Cài đặt API">
+          <button class="btn btn-secondary btn-icon" id="settingsBtn" data-i18n-tooltip="tooltip_settings" data-tooltip="Cài đặt hệ thống">
             <i data-lucide="settings-2" style="width:16px;height:16px;"></i>
           </button>
         </div>
@@ -56,9 +55,9 @@
             <!-- Mode Tabs -->
             <!-- Global Video Orientation Selector -->
             <div class="form-group" style="padding: 0 1.5rem; margin-top: 1.5rem;">
-              <label class="form-label">
-                <i data-lucide="monitor" style="width:13px;height:13px;"></i>
-                Định dạng video (Áp dụng cho mọi chế độ)
+              <label class="form-label" data-i18n="label_orientation">
+                <i data-lucide="monitor"></i>
+                Định dạng video
               </label>
               <div class="orientation-selector" id="orientationSelector">
                 <button class="orientation-btn active" data-orientation="landscape" id="btnLandscape">
@@ -69,7 +68,7 @@
                       <line x1="8" y1="10" x2="20" y2="10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
                     </svg>
                   </span>
-                  <span class="orientation-label">Ngang 16:9</span>
+                  <span class="orientation-label" data-i18n="orientation_landscape">Ngang 16:9</span>
                   <span class="orientation-res">1920 × 1080</span>
                 </button>
                 <button class="orientation-btn" data-orientation="portrait" id="btnPortrait">
@@ -80,7 +79,7 @@
                       <line x1="5" y1="12" x2="13" y2="12" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
                     </svg>
                   </span>
-                  <span class="orientation-label">Dọc 9:16</span>
+                  <span class="orientation-label" data-i18n="orientation_portrait">Dọc 9:16</span>
                   <span class="orientation-res">1080 × 1920</span>
                 </button>
               </div>
@@ -116,19 +115,19 @@
                   Phong cách video
                 </label>
                 <select id="videoStyle" class="form-select">
-                  <option value="">Để AI tự chọn</option>
-                  <option value="cinematic">Cinematic — Điện ảnh</option>
-                  <option value="educational">Educational — Giáo dục</option>
-                  <option value="promotional">Promotional — Quảng bá</option>
-                  <option value="documentary">Documentary — Tài liệu</option>
-                  <option value="motivational">Motivational — Truyền cảm hứng</option>
+                  <option value="" data-i18n="style_auto">Để AI tự chọn</option>
+                  <option value="cinematic" data-i18n="style_cinematic">Cinematic — Điện ảnh</option>
+                  <option value="educational" data-i18n="style_educational">Educational — Giáo dục</option>
+                  <option value="promotional" data-i18n="style_promotional">Promotional — Quảng bá</option>
+                  <option value="documentary" data-i18n="style_documentary">Documentary — Tài liệu</option>
+                  <option value="motivational" data-i18n="style_motivational">Motivational — Truyền cảm hứng</option>
                 </select>
               </div>
 
               <div class="form-group" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border);">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
                   <label class="form-label" for="scene-count-slider" style="margin-bottom: 0;" data-i18n="label_scenes">
-                    <i data-lucide="layers" style="width:13px;height:13px;"></i>
+                    <i data-lucide="layers"></i>
                     Số khung hình (Scenes)
                   </label>
                   <span id="scene-count-display" class="scene-count-badge">6</span>
@@ -159,7 +158,7 @@
 
               <div id="newsLoadingStatus" class="news-loading hidden">
                 <div class="news-loading-spinner"></div>
-                <span id="newsLoadingText">🔍 Đang tìm kiếm tin tức...</span>
+                <span id="newsLoadingText" data-i18n="msg_search_news">🔍 Đang tìm kiếm tin tức...</span>
               </div>
 
               <button class="btn btn-primary btn-full" id="btnGenerateNews" data-i18n="btn_hunt">
@@ -195,6 +194,42 @@
         <!-- Script Preview Panel (Hidden completely as requested) -->
         <div id="scriptPanel" style="display:none;"></div>
 
+        <!-- ── STORYBOARD PANEL ────────────────────────────────────────────── -->
+        <div class="panel" id="storyboardPanel" style="display:none;">
+          <div class="panel-header">
+            <div class="panel-title">
+              <i data-lucide="layout-list" style="width:16px;height:16px;"></i>
+              <span id="storyboardVideoTitle" data-i18n="storyboard_title">Bảng phân cảnh</span>
+            </div>
+            <div style="display:flex;gap:0.5rem;align-items:center;">
+              <span id="storyboardSceneCount" style="font-size:0.75rem;color:var(--text-muted);"></span>
+              <button class="btn btn-ghost btn-icon btn-sm" id="storyboardCollapseBtn" data-i18n-tooltip="tooltip_collapse" data-tooltip="Thu gọn">
+                <i data-lucide="chevron-up" style="width:15px;height:15px;"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Scene Cards Container -->
+          <div id="storyboardCards" class="storyboard-cards"></div>
+
+          <!-- Action Footer -->
+          <div class="storyboard-footer">
+            <button class="btn btn-ghost btn-sm" id="storyboardEditAllBtn" data-i18n="storyboard_apply_all">
+              <i data-lucide="sliders-horizontal" style="width:14px;height:14px;"></i>
+              Áp dụng giọng đọc cho tất cả
+            </button>
+            <div style="flex:1;"></div>
+            <button class="btn btn-secondary btn-sm" id="storyboardPreviewBtn" data-i18n="storyboard_preview">
+              <i data-lucide="play" style="width:14px;height:14px;"></i>
+              Xem thử (không lưu)
+            </button>
+            <button class="btn btn-primary" id="storyboardRenderBtn" data-i18n="storyboard_render">
+              <i data-lucide="film" style="width:15px;height:15px;"></i>
+              Chốt! Render Video
+            </button>
+          </div>
+        </div>
+
         <!-- Audio Settings -->
         <div class="panel" id="audioPanel">
           <div class="panel-header" data-i18n="panel_audio_title">
@@ -203,26 +238,26 @@
           </div>
           <div class="panel-body">
             <div class="tabs">
-              <button class="tab-btn active" data-tab="free" id="tabFree">
+              <button class="tab-btn active" data-tab="free" id="tabFree" data-i18n="tab_free">
                 <i data-lucide="zap" style="width:13px;height:13px;"></i>
                 Miễn phí
               </button>
-              <button class="tab-btn" data-tab="edge" id="tabEdge">
+              <button class="tab-btn" data-tab="edge" id="tabEdge" data-i18n="tab_edge">
                 <i data-lucide="mic-2" style="width:13px;height:13px;"></i>
                 Edge TTS
               </button>
             </div>
 
             <div class="tab-content active" id="tab-free">
-              <div class="alert alert-success" style="font-size:0.775rem; margin-bottom: 0.75rem;">
-                <i data-lucide="sparkles" style="width:14px;height:14px;flex-shrink:0;"></i>
+              <div class="alert alert-info">
+                <i data-lucide="info"></i>
                 <span data-i18n="alert_voice_free">Giọng đọc Tiếng Việt chất lượng cao.</span>
               </div>
               <div class="form-group">
                 <label class="form-label" data-i18n="label_speech_rate">Tốc độ đọc</label>
                 <input type="range" id="speechRate" min="0.5" max="2.0" step="0.1" value="1.0"
-                  style="width:100%;accent-color:#a855f7;" />
-                <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--text-muted);">
+                  class="scene-count-slider" />
+                <div style="display:flex;justify-content:space-between;font-size:0.75rem;color:var(--text-muted);margin-top:0.25rem;">
                   <span data-i18n="label_slow">Chậm</span><span id="rateLabel">1.0x</span><span
                     data-i18n="label_fast">Nhanh</span>
                 </div>
@@ -236,33 +271,33 @@
             </div>
 
             <div class="tab-content" id="tab-edge">
-              <div class="alert alert-success" style="font-size:0.775rem; margin-bottom: 0.75rem;">
-                <i data-lucide="sparkles" style="width:14px;height:14px;flex-shrink:0;"></i>
-                <span>322+ giọng đọc neural — miễn phí, không cần API key.</span>
+              <div class="alert alert-info">
+                <i data-lucide="info"></i>
+                <span data-i18n="edge_info">322+ giọng đọc neural — miễn phí, không cần API key.</span>
               </div>
 
               <div class="form-group">
-                <label class="form-label">Giọng đọc</label>
+                <label class="form-label" data-i18n="edge_voice">Giọng đọc</label>
                 <select id="edgeVoiceSelect" class="form-select"></select>
               </div>
 
               <div class="form-group">
-                <label class="form-label">Phong cách đọc</label>
+                <label class="form-label" data-i18n="edge_style">Phong cách đọc</label>
                 <select id="edgeVoiceStyle" class="form-select">
-                  <option value="default">Mặc định</option>
-                  <option value="slow">Chậm rãi</option>
-                  <option value="fast">Nhanh</option>
-                  <option value="serious">Nghiêm túc</option>
-                  <option value="energetic">Năng động</option>
-                  <option value="calm">Bình tĩnh</option>
-                  <option value="cheerful">Vui vẻ</option>
-                  <option value="documentary">Phong cách tài liệu</option>
-                  <option value="news">Phong cách bản tin</option>
+                  <option value="default" data-i18n="style_default">Mặc định</option>
+                  <option value="slow" data-i18n="label_slow">Chậm rãi</option>
+                  <option value="fast" data-i18n="label_fast">Nhanh</option>
+                  <option value="serious" data-i18n="style_serious">Nghiêm túc</option>
+                  <option value="energetic" data-i18n="style_energetic">Năng động</option>
+                  <option value="calm" data-i18n="style_calm">Bình tĩnh</option>
+                  <option value="cheerful" data-i18n="style_cheerful">Vui vẻ</option>
+                  <option value="documentary" data-i18n="style_documentary">Phong cách tài liệu</option>
+                  <option value="news" data-i18n="style_news">Phong cách bản tin</option>
                 </select>
               </div>
 
               <div class="form-group" style="margin-top: 0.5rem;">
-                <button class="btn btn-secondary btn-full btn-sm" id="testEdgeVoiceBtn">
+                <button class="btn btn-secondary btn-full btn-sm" id="testEdgeVoiceBtn" data-i18n="btn_test_voice">
                   <i data-lucide="play-circle" style="width:14px;height:14px;"></i>
                   Nghe thử
                 </button>
@@ -302,15 +337,14 @@
 
           <!-- Video Controls -->
           <div class="video-controls">
-            <button class="btn btn-secondary btn-icon" id="playStopBtn" disabled data-tooltip="Xem thử / Dừng">
-              <i data-lucide="play" id="playStopIcon" style="width:18px;height:18px;"></i>
+            <button class="btn btn-secondary btn-icon" id="playStopBtn" disabled data-i18n-tooltip="tooltip_play_stop" data-tooltip="Xem thử / Dừng">
+              <i data-lucide="play" id="playStopIcon"></i>
             </button>
 
-            <div style="flex:1;"></div>
-
-            <button class="btn btn-ghost" id="resetBtn" style="gap: 6px; padding: 0 12px;">
-              <i data-lucide="sparkles" style="width:16px;height:16px;"></i>
-              <span style="font-size: 0.85rem; font-weight: 600;" data-i18n="btn_new_session">Phiên mới</span>
+            <div style="flex:2;"></div>
+            <button class="btn btn-ghost" id="resetBtn">
+              <i data-lucide="sparkles"></i>
+              <span class="btn-text" data-i18n="btn_new_session">Phiên mới</span>
             </button>
           </div>
 
@@ -321,22 +355,116 @@
 
         <!-- Download Section -->
         <div class="panel" id="downloadSection" style="display:none;">
-          <div class="download-ready">
-            <div class="download-icon" style="background: #a855f7;">
-              <i data-lucide="check-circle-2" style="width:36px;height:36px;color:#fff;"></i>
-            </div>
-            <h3 data-i18n="download_ready_title">Video đã sẵn sàng!</h3>
-            <!-- Video Preview Player -->
-            <div class="video-preview-container"
-              style="width: 100%; margin: 1.5rem 0; background: #000; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
-              <video id="finalPreview" controls
-                style="width: 100%; max-height: 450px; display: block; object-fit: contain;"></video>
-            </div>
-            <div style="display:flex;gap:0.75rem;flex-wrap:wrap;justify-content:center;margin-top:1rem;">
-              <a id="downloadLink" href="#" download="video.webm" class="btn btn-success" data-i18n="btn_download">
-                <i data-lucide="download" style="width:15px;height:15px;"></i>
-                Tải xuống
+          <div class="panel-body">
+            <div class="download-ready" style="text-align: center;">
+              <div class="download-icon" style="width: 56px; height: 56px; background: rgba(16, 185, 129, 0.1); border-radius: 9999px; display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem;">
+                <i data-lucide="check" style="width:28px;height:28px;color:#10b981;"></i>
+              </div>
+              <h3 data-i18n="download_ready_title" style="margin-bottom: 0.5rem;">Video đã sẵn sàng!</h3>
+              <p style="font-size: 0.875rem; color: var(--text-muted);" data-i18n="download_desc">Bạn có thể tải xuống hoặc đăng trực tiếp lên YouTube.</p>
+              
+              <!-- Video Preview Player -->
+              <div class="video-preview-container" style="margin: 1.5rem 0;">
+                <video id="finalPreview" controls style="width: 100%; border-radius: 12px; border: 1px solid var(--border); box-shadow: var(--shadow); background: #000;"></video>
+              </div>
+              
+              <a id="downloadLink" href="#" download="video.webm" class="btn btn-primary btn-full" data-i18n="btn_download">
+                <i data-lucide="download"></i>
+                Tải xuống video (.webm)
               </a>
+            </div>
+
+            <!-- YouTube Upload Section -->
+            <div id="youtubeSection" style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--border);">
+              
+              <!-- Not connected state -->
+              <div id="ytNotConnected" style="text-align: center;">
+                <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 1rem;" data-i18n="yt_connect_msg">
+                  Kết nối tài khoản YouTube để đăng video trực tiếp.
+                </p>
+                <button class="btn btn-secondary btn-full" id="btnYoutubeConnect" data-i18n="yt_btn_connect">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.42a2.78 2.78 0 0 0-1.94 2C1 8.11 1 12 1 12s0 3.89.46 5.58a2.78 2.78 0 0 0 1.94 2c1.72.42 8.6.42 8.6.42s6.88 0 8.6-.42a2.78 2.78 0 0 0 1.94-2C23 15.89 23 12 23 12s0-3.89-.46-5.58z"></path><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"></polygon></svg>
+                  Kết nối YouTube
+                </button>
+              </div>
+
+              <!-- Connected state -->
+              <div id="ytConnected" style="display:none;">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 1.25rem;">
+                  <div style="display:flex; align-items:center; gap: 0.625rem;">
+                    <div style="width: 32px; height: 32px; background: rgba(239, 68, 68, 0.1); border-radius: 9999px; display: flex; align-items: center; justify-content: center;">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.42a2.78 2.78 0 0 0-1.94 2C1 8.11 1 12 1 12s0 3.89.46 5.58a2.78 2.78 0 0 0 1.94 2c1.72.42 8.6.42 8.6.42s6.88 0 8.6-.42a2.78 2.78 0 0 0 1.94-2C23 15.89 23 12 23 12s0-3.89-.46-5.58z"></path><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"></polygon></svg>
+                    </div>
+                    <span id="ytChannelName" style="font-size: 0.875rem; font-weight: 500;" data-i18n="yt_channel">Kênh YouTube</span>
+                  </div>
+                  <button class="btn btn-ghost btn-sm" id="btnYoutubeDisconnect" style="font-size: 0.75rem;" data-i18n="yt_btn_disconnect">
+                    Ngắt kết nối
+                  </button>
+                </div>
+
+                <!-- Upload form -->
+                <div style="display:flex;flex-direction:column;gap:0.75rem;">
+                  <div class="form-group">
+                    <label class="form-label" data-i18n="yt_label_title">Tiêu đề video</label>
+                    <input type="text" id="ytVideoTitle" class="form-input" placeholder="Để trống = dùng tiêu đề AI tạo ra" data-i18n-placeholder="yt_placeholder_title" />
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" data-i18n="yt_label_desc">Mô tả</label>
+                    <textarea id="ytVideoDesc" class="form-textarea" rows="2" placeholder="Mô tả video (tùy chọn)" data-i18n-placeholder="yt_placeholder_desc"></textarea>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" data-i18n="yt_label_tags">Tags (phân cách bằng dấu phẩy)</label>
+                    <input type="text" id="ytVideoTags" class="form-input" placeholder="AI, video, tin tức, ..." data-i18n-placeholder="yt_placeholder_tags" />
+                  </div>
+
+                  <!-- Privacy selector -->
+                  <div class="form-group">
+                    <label class="form-label" data-i18n="yt_label_privacy">Quyền riêng tư</label>
+                    <select id="ytPrivacy" class="form-select">
+                      <option value="public" data-i18n="privacy_public">Công khai</option>
+                      <option value="unlisted" data-i18n="privacy_unlisted">Không công khai (có link)</option>
+                      <option value="private" data-i18n="privacy_private">Riêng tư</option>
+                    </select>
+                  </div>
+
+                  <!-- Shorts badge if portrait -->
+                  <div id="ytShortsBadge" style="display:none; padding: 0.75rem; background: rgba(28, 28, 28, 0.03); border: 1px solid var(--border); border-radius: 8px; font-size: 0.8125rem; color: var(--text-primary); text-align: center;" data-i18n="yt_shorts_msg">
+                    📱 Chế độ <strong>YouTube Shorts</strong> tự động được bật
+                  </div>
+
+                  <!-- Upload button -->
+                  <button class="btn btn-primary btn-full" id="btnYoutubeUpload" data-i18n="yt_btn_upload">
+                    <i data-lucide="upload-cloud"></i>
+                    Đăng lên YouTube
+                  </button>
+
+                  <!-- Upload progress -->
+                  <div id="ytUploadProgress" style="display:none;">
+                    <div style="display:flex;justify-content:space-between;margin-bottom:0.375rem;">
+                      <span style="font-size:0.8rem;color:var(--text-secondary);" id="ytUploadLabel" data-i18n="yt_msg_uploading">Đang tải lên...</span>
+                      <span style="font-size:0.8rem;color:var(--text-primary);" id="ytUploadPct">0%</span>
+                    </div>
+                    <div class="progress-bar-track">
+                      <div class="progress-bar-fill" id="ytUploadBar" style="width:0%;"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Success state -->
+              <div id="ytUploadSuccess" style="display:none;text-align:center;">
+                <div style="font-size:2rem;margin-bottom:0.5rem;">🎉</div>
+                <p style="font-weight: 500; color: #166534; margin-bottom: 1.25rem;" data-i18n="yt_msg_success">Video của bạn đã được đăng thành công!</p>
+                <div style="display:flex; gap: 0.75rem; justify-content: center;">
+                  <a id="ytVideoLink" href="#" target="_blank" class="btn btn-primary btn-sm" data-i18n="yt_btn_view">
+                    Xem video
+                  </a>
+                  <a id="ytShortsLink" href="#" target="_blank" class="btn btn-secondary btn-sm" style="display:none;" data-i18n="yt_btn_view_shorts">
+                    Xem Shorts
+                  </a>
+                </div>
+              </div>
+
             </div>
           </div>
         </div>
@@ -349,17 +477,42 @@
   <div class="modal-backdrop" id="settingsModal">
     <div class="modal">
       <div class="modal-header">
-        <div class="modal-title" data-i18n="settings_title">Cài đặt API</div>
+        <div class="modal-title" data-i18n="settings_title">Cài đặt hệ thống</div>
         <button class="btn btn-ghost btn-icon" id="closeSettingsBtn"><i data-lucide="x"></i></button>
       </div>
       <div class="modal-body">
-        <div class="form-group">
-          <label class="form-label" data-i18n="settings_gemini">Gemini API Key</label>
-          <input type="password" id="geminiKeyInput" class="form-input" />
+        <!-- Tabs Header -->
+        <div class="tabs" style="margin-bottom: 1.5rem;">
+          <button class="tab-btn active" data-tab="settings-api" data-i18n="tab_api_keys">
+            <i data-lucide="key" style="width:14px;height:14px;"></i> API Keys
+          </button>
+          <button class="tab-btn" data-tab="settings-quota" id="tabQuotaBtn" data-i18n="tab_quota">
+            <i data-lucide="bar-chart-3" style="width:14px;height:14px;"></i> Hạn mức
+          </button>
         </div>
-        <!-- ElevenLabs API Key removed as we use Edge-TTS now -->
+
+        <!-- Tab Content: API -->
+        <div id="settings-api" class="tab-content active">
+          <div class="form-group">
+            <label class="form-label" data-i18n="settings_gemini">Gemini API Key</label>
+            <input type="password" id="geminiKeyInput" class="form-input" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" data-i18n="settings_jina">Jina API Key</label>
+            <input type="password" id="jinaKeyInput" class="form-input" placeholder="Dùng cho Article URL to Video" data-i18n-placeholder="placeholder_jina" />
+          </div>
+        </div>
+
+        <!-- Tab Content: Quota -->
+        <div id="settings-quota" class="tab-content">
+          <div id="quotaContainer" style="display:flex; flex-direction:column; gap:1.25rem;">
+            <div style="text-align:center; padding: 1rem; color: var(--text-muted);" data-i18n="quota_loading">
+              Đang tải thông tin hạn mức...
+            </div>
+          </div>
+        </div>
       </div>
-      <div class="modal-footer">
+      <div class="modal-footer" id="settingsModalFooter">
         <button class="btn btn-primary btn-full" id="saveSettingsBtn" data-i18n="settings_save">Lưu cài đặt</button>
       </div>
     </div>
